@@ -263,82 +263,6 @@ function createTextureCanvas(width: number, height: number) {
   return canvas
 }
 
-function createGrassTexture() {
-  const canvas = createTextureCanvas(1024, 1024)
-  const context = canvas.getContext('2d')
-
-  if (!context) {
-    return new THREE.Texture()
-  }
-
-  const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height)
-  gradient.addColorStop(0, '#20402a')
-  gradient.addColorStop(0.55, '#16301f')
-  gradient.addColorStop(1, '#254a31')
-  context.fillStyle = gradient
-  context.fillRect(0, 0, canvas.width, canvas.height)
-
-  // soft moonlight pools
-  for (let index = 0; index < 7; index += 1) {
-    const x = Math.random() * canvas.width
-    const y = Math.random() * canvas.height
-    const radius = 120 + Math.random() * 190
-    const pool = context.createRadialGradient(x, y, 0, x, y, radius)
-    pool.addColorStop(0, 'rgba(190, 214, 235, 0.11)')
-    pool.addColorStop(1, 'rgba(190, 214, 235, 0)')
-    context.fillStyle = pool
-    context.fillRect(x - radius, y - radius, radius * 2, radius * 2)
-  }
-
-  // dark mottling for depth
-  for (let index = 0; index < 10; index += 1) {
-    const x = Math.random() * canvas.width
-    const y = Math.random() * canvas.height
-    const radius = 90 + Math.random() * 160
-    const shade = context.createRadialGradient(x, y, 0, x, y, radius)
-    shade.addColorStop(0, 'rgba(6, 14, 10, 0.16)')
-    shade.addColorStop(1, 'rgba(6, 14, 10, 0)')
-    context.fillStyle = shade
-    context.fillRect(x - radius, y - radius, radius * 2, radius * 2)
-  }
-
-  // grass blades
-  for (let index = 0; index < 3600; index += 1) {
-    const x = Math.random() * canvas.width
-    const y = Math.random() * canvas.height
-    const length = 5 + Math.random() * 14
-    const shade = index % 9 === 0 ? '#7fae74' : index % 4 === 0 ? '#3f6b46' : '#2a4c32'
-    context.strokeStyle = shade
-    context.globalAlpha = 0.1 + Math.random() * 0.14
-    context.lineWidth = 1 + Math.random()
-    context.beginPath()
-    context.moveTo(x, y)
-    context.quadraticCurveTo(x + (Math.random() - 0.5) * 6, y - length * 0.6, x + (Math.random() - 0.5) * 9, y - length)
-    context.stroke()
-  }
-
-  // tiny baked micro-flowers and dew glints
-  for (let index = 0; index < 130; index += 1) {
-    const x = Math.random() * canvas.width
-    const y = Math.random() * canvas.height
-    context.fillStyle = index % 3 === 0 ? '#f4e9ff' : index % 3 === 1 ? '#ffdff0' : '#fdfbe8'
-    context.globalAlpha = 0.25 + Math.random() * 0.3
-    context.beginPath()
-    context.arc(x, y, 1 + Math.random() * 1.6, 0, Math.PI * 2)
-    context.fill()
-  }
-
-  context.globalAlpha = 1
-
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
-  texture.wrapS = THREE.RepeatWrapping
-  texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(6, 6)
-  texture.anisotropy = 16
-  return texture
-}
-
 function drawStone(
   context: CanvasRenderingContext2D,
   x: number,
@@ -2151,7 +2075,7 @@ function FirstPersonRig({
   useFrame((_, delta) => {
     if (!inputBlocked) {
       yawRef.current += lookRef.current.dx * 0.0032
-      pitchRef.current = clamp(pitchRef.current - lookRef.current.dy * 0.0022, -0.55, 0.32)
+      pitchRef.current = clamp(pitchRef.current - lookRef.current.dy * 0.0022, -0.42, 0.32)
     }
 
     lookRef.current.dx = 0
@@ -2299,19 +2223,71 @@ function configureGrassTexture(texture: THREE.Texture | THREE.Texture[]) {
   })
 }
 
+// A deliberately SMOOTH, low-frequency lawn. A detailed grass photo shreds into
+// streaks at grazing angles no matter the anisotropy; this has no fine detail to
+// alias, so the ground stays clean when you look along it. Grass tufts + flowers
+// on top supply the actual detail.
+let cachedMeadowTexture: THREE.Texture | null = null
+
+function createMeadowTexture() {
+  if (cachedMeadowTexture) {
+    return cachedMeadowTexture
+  }
+
+  const canvas = createTextureCanvas(512, 512)
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return new THREE.Texture()
+  }
+
+  const gradient = context.createLinearGradient(0, 0, 0, 512)
+  gradient.addColorStop(0, '#20402a')
+  gradient.addColorStop(0.5, '#1a3524')
+  gradient.addColorStop(1, '#24462e')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, 512, 512)
+
+  // large, soft moonlight pools
+  for (let index = 0; index < 7; index += 1) {
+    const x = pseudoRandom(index * 2 + 1) * 512
+    const y = pseudoRandom(index * 2 + 2) * 512
+    const radius = 130 + pseudoRandom(index * 3 + 5) * 150
+    const pool = context.createRadialGradient(x, y, 0, x, y, radius)
+    pool.addColorStop(0, 'rgba(150, 182, 214, 0.1)')
+    pool.addColorStop(1, 'rgba(150, 182, 214, 0)')
+    context.fillStyle = pool
+    context.fillRect(x - radius, y - radius, radius * 2, radius * 2)
+  }
+
+  // large, soft shadow patches for gentle depth
+  for (let index = 0; index < 8; index += 1) {
+    const x = pseudoRandom(index * 5 + 40) * 512
+    const y = pseudoRandom(index * 5 + 41) * 512
+    const radius = 110 + pseudoRandom(index * 5 + 42) * 170
+    const shade = context.createRadialGradient(x, y, 0, x, y, radius)
+    shade.addColorStop(0, 'rgba(8, 18, 12, 0.16)')
+    shade.addColorStop(1, 'rgba(8, 18, 12, 0)')
+    context.fillStyle = shade
+    context.fillRect(x - radius, y - radius, radius * 2, radius * 2)
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(3, 4)
+  texture.anisotropy = 16
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.needsUpdate = true
+  cachedMeadowTexture = texture
+  return texture
+}
+
 function GroundPlane() {
-  const grassMap = useTexture('/assets/textures/grass.jpg', configureGrassTexture)
   const cobbleMap = useTexture('/assets/textures/cobblestone.jpg', configureGrassTexture)
-  const grass = useMemo(() => {
-    const cloned = grassMap.clone()
-    // bigger tiles (lower repeat) = far less minification = far less streaking
-    cloned.repeat.set(6, 9)
-    cloned.anisotropy = 16
-    cloned.minFilter = THREE.LinearMipmapLinearFilter
-    cloned.generateMipmaps = true
-    cloned.needsUpdate = true
-    return cloned
-  }, [grassMap])
+  // smooth procedural lawn — never streaks at grazing angles
+  const grass = useMemo(() => createMeadowTexture(), [])
   const cobble = useMemo(() => {
     const cloned = cobbleMap.clone()
     cloned.repeat.set(4, 4)
@@ -2328,7 +2304,7 @@ function GroundPlane() {
         <planeGeometry args={[44, 64]} />
         {/* base ground pushed back in depth so every decal above it wins cleanly */}
         <meshStandardMaterial
-          color="#7e94a4"
+          color="#dbe3d4"
           map={grass}
           roughness={1}
           polygonOffset
@@ -2345,7 +2321,7 @@ function GroundPlane() {
 }
 
 function GroundFallback() {
-  const grassTexture = useMemo(() => createGrassTexture(), [])
+  const grassTexture = useMemo(() => createMeadowTexture(), [])
   const cobbleTexture = useMemo(() => createCobbleTexture(), [])
 
   return (
@@ -2353,7 +2329,7 @@ function GroundFallback() {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -20]} receiveShadow>
         <planeGeometry args={[44, 64]} />
         <meshStandardMaterial
-          color="#c2cdbf"
+          color="#dbe3d4"
           map={grassTexture}
           roughness={1}
           polygonOffset
