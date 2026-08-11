@@ -53,6 +53,16 @@ const stationPositions: Record<StationId, Vec3> = {
   final: [0, 0, -42],
 }
 
+// fixed-position secrets the guiding arrow can point to once the memories are done
+const guidableSecrets: Array<{ id: SecretId; pos: Vec3; label: string }> = [
+  { id: 'teddy', pos: [-12.2, 0, -3.9], label: 'a hidden teddy ✦' },
+  { id: 'book', pos: [9, 0, -32.45], label: 'the unfinished book ✦' },
+  { id: 'cart', pos: [6.8, 0, 3.2], label: 'the flower cart ✦' },
+  { id: 'maze', pos: [0, 0, -18], label: 'the heart of the maze ✦' },
+  { id: 'boss', pos: [0, 0, -46], label: 'a certain statue ✦' },
+  { id: 'moon', pos: [9, 15.5, -58], label: 'the moon ✦' },
+]
+
 type WallBox = { x: number; z: number; w: number; d: number }
 type BenchSeat = { x: number; z: number; yaw: number; label: string }
 
@@ -325,7 +335,7 @@ function createGrassTexture() {
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.RepeatWrapping
   texture.repeat.set(6, 6)
-  texture.anisotropy = 8
+  texture.anisotropy = 16
   return texture
 }
 
@@ -394,7 +404,7 @@ function createCobbleTexture() {
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
-  texture.anisotropy = 8
+  texture.anisotropy = 16
   return texture
 }
 
@@ -426,7 +436,7 @@ function createFlagstoneTexture() {
   texture.colorSpace = THREE.SRGBColorSpace
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.RepeatWrapping
-  texture.anisotropy = 8
+  texture.anisotropy = 16
   return texture
 }
 
@@ -451,7 +461,7 @@ function createSteppingPathTexture() {
   texture.colorSpace = THREE.SRGBColorSpace
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.RepeatWrapping
-  texture.anisotropy = 8
+  texture.anisotropy = 16
   return texture
 }
 
@@ -728,7 +738,7 @@ function getDistanceToStation(player: PlayerSample, station: StationId) {
   return Math.hypot(player.x - x, player.z - z)
 }
 
-function getNearbyInteractable(player: PlayerSample): Interactable | null {
+function getNearbyInteractable(player: PlayerSample, gateOpen: boolean): Interactable | null {
   const order: Array<{ id: StationId; radius: number }> = [
     { id: 'gate', radius: 3 },
     { id: 'archive', radius: 3.4 },
@@ -741,6 +751,11 @@ function getNearbyInteractable(player: PlayerSample): Interactable | null {
   let nearest: Interactable | null = null
 
   order.forEach(({ id, radius }) => {
+    // once the gate is open it is no longer an interaction, just an archway
+    if (id === 'gate' && gateOpen) {
+      return
+    }
+
     const distance = getDistanceToStation(player, id)
 
     if (distance <= radius && (!nearest || distance < nearest.distance)) {
@@ -892,7 +907,7 @@ function SceneCanvas() {
     pagesTurned.every(Boolean)
 
   const currentArea = useMemo(() => getAreaLabel(playerSample), [playerSample])
-  const interactable = useMemo(() => getNearbyInteractable(playerSample), [playerSample])
+  const interactable = useMemo(() => getNearbyInteractable(playerSample, gateOpen), [playerSample, gateOpen])
   const nearbySeat = useMemo(() => getNearbySeat(playerSample), [playerSample])
 
   // where the guiding arrow should point: the gate first, then the nearest
@@ -909,6 +924,22 @@ function SceneCanvas() {
     if (!pagesTurned.every(Boolean)) remaining.push({ id: 'reading', label: 'Moon Bench' })
 
     if (remaining.length === 0) {
+      // everything is awake: guide to the nearest undiscovered secret, then the arch
+      const unfound = guidableSecrets.filter((entry) => !secretsFound.includes(entry.id))
+
+      if (unfound.length > 0) {
+        let bestSecret = unfound[0]
+        let bestSecretDistance = Math.hypot(bestSecret.pos[0] - playerSample.x, bestSecret.pos[2] - playerSample.z)
+        unfound.forEach((entry) => {
+          const distance = Math.hypot(entry.pos[0] - playerSample.x, entry.pos[2] - playerSample.z)
+          if (distance < bestSecretDistance) {
+            bestSecret = entry
+            bestSecretDistance = distance
+          }
+        })
+        return { pos: bestSecret.pos, label: bestSecret.label }
+      }
+
       return { pos: stationPositions.final, label: 'the White-Rose Arch' }
     }
 
@@ -923,7 +954,7 @@ function SceneCanvas() {
     })
 
     return { pos: stationPositions[best.id], label: best.label }
-  }, [gateOpen, archiveOpened, lanternsLit, pathCollected, pagesTurned, playerSample])
+  }, [gateOpen, archiveOpened, lanternsLit, pathCollected, pagesTurned, playerSample, secretsFound])
 
   const guideAngle = useMemo(() => {
     const dx = guideTarget.pos[0] - playerSample.x
@@ -1015,6 +1046,20 @@ function SceneCanvas() {
       window.clearTimeout(timeoutId)
     }
   }, [finalOpen])
+
+  useEffect(() => {
+    if (!finalUnlocked || finalOpen) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDetailMessage(
+        'Every memory is awake. The arrow now points to the white-rose arch — or wander first and gather the hidden secrets.',
+      )
+    }, 500)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [finalUnlocked, finalOpen])
 
   const padelFleeCountRef = useRef(0)
   const creditsShownRef = useRef(false)
@@ -1512,6 +1557,8 @@ function SceneCanvas() {
         <SecretMarker position={[9, 1.55, -32.45]} found={secretsFound.includes('book')} />
         <SecretMarker position={[0, 2.7, -46]} found={secretsFound.includes('boss')} />
         <SecretMarker position={[6.8, 1.2, 3.2]} found={secretsFound.includes('cart')} />
+        <SecretMarker position={[0, 4.2, -18]} found={secretsFound.includes('maze')} />
+        <SecretMarker position={[9, 17, -58]} found={secretsFound.includes('moon')} />
         <Fireflies count={deviceProfile.mobile ? (epilogue ? 40 : 26) : epilogue ? 60 : 42} />
         <WindPetals count={deviceProfile.mobile ? (epilogue ? 34 : 22) : epilogue ? 50 : 34} />
         <Teddy />
@@ -1529,7 +1576,7 @@ function SceneCanvas() {
         <StarlitPath progress={pathCount} complete={pathCollected.every(Boolean)} highlighted={interactable?.id === 'path'} />
         <ReadingNook progress={readingCount} complete={pagesTurned.every(Boolean)} highlighted={interactable?.id === 'reading'} />
         <FinalArch open={finalOpen} unlocked={finalUnlocked} highlighted={interactable?.id === 'final'} />
-        {finalOpen ? <LetterDisplay /> : null}
+        {finalOpen && !letterVisible ? <LetterDisplay /> : null}
         {interactable ? <InteractionBeacon station={interactable.id} /> : null}
       </Canvas>
 
@@ -2243,7 +2290,11 @@ function configureGrassTexture(texture: THREE.Texture | THREE.Texture[]) {
     entry.colorSpace = THREE.SRGBColorSpace
     entry.wrapS = THREE.RepeatWrapping
     entry.wrapT = THREE.RepeatWrapping
-    entry.anisotropy = 8
+    // maximum anisotropy + trilinear mipmaps kill the grazing-angle streaking
+    entry.anisotropy = 16
+    entry.minFilter = THREE.LinearMipmapLinearFilter
+    entry.magFilter = THREE.LinearFilter
+    entry.generateMipmaps = true
     entry.needsUpdate = true
   })
 }
@@ -2253,13 +2304,20 @@ function GroundPlane() {
   const cobbleMap = useTexture('/assets/textures/cobblestone.jpg', configureGrassTexture)
   const grass = useMemo(() => {
     const cloned = grassMap.clone()
-    cloned.repeat.set(9, 13)
+    // bigger tiles (lower repeat) = far less minification = far less streaking
+    cloned.repeat.set(6, 9)
+    cloned.anisotropy = 16
+    cloned.minFilter = THREE.LinearMipmapLinearFilter
+    cloned.generateMipmaps = true
     cloned.needsUpdate = true
     return cloned
   }, [grassMap])
   const cobble = useMemo(() => {
     const cloned = cobbleMap.clone()
-    cloned.repeat.set(5, 5)
+    cloned.repeat.set(4, 4)
+    cloned.anisotropy = 16
+    cloned.minFilter = THREE.LinearMipmapLinearFilter
+    cloned.generateMipmaps = true
     cloned.needsUpdate = true
     return cloned
   }, [cobbleMap])
@@ -2407,7 +2465,7 @@ function FallingBlossoms({ count = 14 }: { count?: number }) {
 }
 
 function MazeHeart() {
-  const blossomColors = ['#f9b9d8', '#ffcbe2', '#f3a5cd', '#ffd9ea']
+  const blossomColors = ['#ffd9ea', '#ffe6f2', '#f9c4de', '#fff0f6', '#ffcbe2']
 
   return (
     <group position={[0, 0, -18]} userData={{ secret: 'maze' }}>
@@ -2429,19 +2487,27 @@ function MazeHeart() {
         <meshStandardMaterial color="#5a4436" roughness={0.9} />
       </mesh>
       {[
-        { position: [0, 2.85, 0] as Vec3, radius: 0.85 },
-        { position: [0.75, 2.5, 0.25] as Vec3, radius: 0.6 },
-        { position: [-0.7, 2.6, -0.25] as Vec3, radius: 0.62 },
-        { position: [0.3, 3.25, -0.35] as Vec3, radius: 0.5 },
-        { position: [-0.3, 3.2, 0.4] as Vec3, radius: 0.52 },
+        { position: [0, 2.95, 0] as Vec3, radius: 0.6 },
+        { position: [0.6, 2.75, 0.2] as Vec3, radius: 0.48 },
+        { position: [-0.6, 2.8, -0.2] as Vec3, radius: 0.5 },
+        { position: [0.35, 3.2, -0.3] as Vec3, radius: 0.42 },
+        { position: [-0.35, 3.15, 0.35] as Vec3, radius: 0.44 },
+        { position: [0.82, 3.0, -0.35] as Vec3, radius: 0.36 },
+        { position: [-0.78, 3.05, 0.3] as Vec3, radius: 0.38 },
+        { position: [0.15, 3.48, 0.1] as Vec3, radius: 0.4 },
+        { position: [-0.2, 2.6, 0.55] as Vec3, radius: 0.4 },
+        { position: [0.28, 2.62, -0.55] as Vec3, radius: 0.4 },
+        { position: [0.98, 2.85, 0.15] as Vec3, radius: 0.32 },
+        { position: [-0.95, 2.9, -0.1] as Vec3, radius: 0.34 },
       ].map((cluster, index) => (
-        <mesh key={index} position={cluster.position}>
-          <sphereGeometry args={[cluster.radius, 16, 16]} />
+        <mesh key={index} position={cluster.position} rotation={[index * 0.7, index * 1.1, 0]}>
+          <icosahedronGeometry args={[cluster.radius, 0]} />
           <meshStandardMaterial
             color={blossomColors[index % blossomColors.length]}
-            emissive="#ff9ecb"
-            emissiveIntensity={0.24}
-            roughness={0.85}
+            emissive="#ffb3d6"
+            emissiveIntensity={0.13}
+            roughness={0.92}
+            flatShading
           />
         </mesh>
       ))}
@@ -2551,15 +2617,17 @@ function PathRibbon({ start, end, width }: { start: Vec3; end: Vec3; width: numb
   }, [length])
 
   return (
-    <mesh position={midpoint} rotation={[-Math.PI / 2, 0, angle]}>
+    <mesh position={midpoint} rotation={[-Math.PI / 2, 0, angle]} renderOrder={2}>
       <planeGeometry args={[width, length]} />
+      {/* a ground decal: depthWrite off so overlapping ribbons layer without z-fighting */}
       <meshStandardMaterial
         color="#d3d6e8"
         map={texture}
         roughness={0.94}
         polygonOffset
-        polygonOffsetFactor={-1}
-        polygonOffsetUnits={-1}
+        polygonOffsetFactor={-2}
+        polygonOffsetUnits={-2}
+        depthWrite={false}
       />
     </mesh>
   )
@@ -2568,7 +2636,7 @@ function PathRibbon({ start, end, width }: { start: Vec3; end: Vec3; width: numb
 function configureMoonTexture(texture: THREE.Texture | THREE.Texture[]) {
   const single = Array.isArray(texture) ? texture[0] : texture
   single.colorSpace = THREE.SRGBColorSpace
-  single.anisotropy = 4
+  single.anisotropy = 16
   single.needsUpdate = true
 }
 
@@ -2584,41 +2652,31 @@ function MoonRig() {
   })
 
   return (
-    <group position={[9, 15.5, -58]} userData={{ secret: 'moon' }}>
+    <group position={[9, 16, -58]} userData={{ secret: 'moon' }}>
       <mesh ref={moonRef} rotation={[0.35, 2.2, 0.12]}>
-        <sphereGeometry args={[5.6, 48, 48]} />
+        <sphereGeometry args={[6, 64, 64]} />
         <meshStandardMaterial
           map={moonTexture}
           emissiveMap={moonTexture}
-          emissive="#fef7e2"
-          emissiveIntensity={1.18}
-          color="#10131f"
+          emissive="#fff4dc"
+          emissiveIntensity={1.42}
+          color="#0c0f1a"
           roughness={1}
           fog={false}
         />
       </mesh>
-      <sprite scale={[16, 16, 1]}>
-        <spriteMaterial
-          map={glowTexture}
-          color="#fff3cd"
-          transparent
-          opacity={0.72}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          fog={false}
-        />
+      {/* layered corona: tight warm core → gold bloom → wide cool atmosphere */}
+      <sprite scale={[14, 14, 1]}>
+        <spriteMaterial map={glowTexture} color="#fff6d8" transparent opacity={0.6} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
       </sprite>
-      <sprite scale={[32, 32, 1]}>
-        <spriteMaterial
-          map={glowTexture}
-          color="#cdd8ff"
-          transparent
-          opacity={0.26}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          fog={false}
-        />
+      <sprite scale={[24, 24, 1]}>
+        <spriteMaterial map={glowTexture} color="#ffe9b0" transparent opacity={0.34} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
       </sprite>
+      <sprite scale={[46, 46, 1]}>
+        <spriteMaterial map={glowTexture} color="#bcccff" transparent opacity={0.18} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
+      </sprite>
+      {/* a faint dusting of stars right around the moon */}
+      <Sparkles count={16} scale={[16, 16, 4]} size={2.4} speed={0.1} color="#fff4d6" />
     </group>
   )
 }
@@ -2705,20 +2763,27 @@ function SecretHitbox({ secret, position, radius = 1 }: { secret: SecretId; posi
   )
 }
 
-// A soft, gently-pulsing sparkle that hints "this is tappable" — it fades away
-// once the secret has been discovered.
+// A bright, bobbing beacon-gem that clearly says "tap here" — it vanishes once
+// the secret has been discovered.
 function SecretMarker({ position, found }: { position: Vec3; found: boolean }) {
   const spriteRef = useRef<THREE.Sprite>(null)
+  const gemRef = useRef<THREE.Mesh>(null)
   const glowTexture = useMemo(() => createGlowTexture(), [])
 
   useFrame(({ clock }) => {
+    const time = clock.elapsedTime
     const sprite = spriteRef.current
 
     if (sprite) {
       const material = sprite.material as THREE.SpriteMaterial
-      material.opacity = found ? 0 : 0.22 + Math.sin(clock.elapsedTime * 2.3) * 0.16
-      const scale = 0.75 + Math.sin(clock.elapsedTime * 2.3) * 0.12
+      material.opacity = found ? 0 : 0.5 + Math.sin(time * 2.6) * 0.28
+      const scale = 1.8 + Math.sin(time * 2.6) * 0.4
       sprite.scale.set(scale, scale, 1)
+    }
+
+    if (gemRef.current) {
+      gemRef.current.position.y = Math.sin(time * 1.8) * 0.12
+      gemRef.current.rotation.y = time * 1.6
     }
   })
 
@@ -2727,15 +2792,19 @@ function SecretMarker({ position, found }: { position: Vec3; found: boolean }) {
       <sprite ref={spriteRef}>
         <spriteMaterial
           map={glowTexture}
-          color="#ffe9a8"
+          color="#ffe4a0"
           transparent
-          opacity={0.3}
+          opacity={0.5}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           fog={false}
         />
       </sprite>
-      {!found ? <Sparkles count={5} scale={[0.5, 0.7, 0.5]} size={1.3} speed={0.3} color="#fff0bd" /> : null}
+      <mesh ref={gemRef}>
+        <octahedronGeometry args={[0.13, 0]} />
+        <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={1.6} toneMapped={false} />
+      </mesh>
+      {!found ? <Sparkles count={8} scale={[0.8, 1.1, 0.8]} size={2} speed={0.45} color="#fff0bd" /> : null}
     </group>
   )
 }
@@ -3809,18 +3878,26 @@ function FlowerCluster({ position, scale, palette }: { position: Vec3; scale: nu
   return (
     <group position={position} scale={scale}>
       {[-0.18, 0, 0.18].map((x, index) => (
-        <group key={index} position={[x, 0, index % 2 === 0 ? -0.12 : 0.12]}>
+        <group key={index} position={[x, 0, index % 2 === 0 ? -0.12 : 0.12]} rotation={[0, index * 1.3, 0]}>
           <mesh position={[0, 0.18, 0]}>
-            <cylinderGeometry args={[0.02, 0.03, 0.36, 8]} />
-            <meshStandardMaterial color="#5f9d72" roughness={0.92} />
+            <cylinderGeometry args={[0.016, 0.028, 0.36, 6]} />
+            <meshStandardMaterial color="#4c7a52" roughness={0.9} />
           </mesh>
-          <mesh position={[0, 0.39, 0]}>
-            <sphereGeometry args={[0.1, 12, 12]} />
-            <meshStandardMaterial color={petalColor} emissive={glowColor} emissiveIntensity={0.5} roughness={0.52} />
+          {/* a soft faceted bloom head — gently lit, not a glowing orb */}
+          <mesh position={[0, 0.4, 0]} rotation={[0.35, index, 0]} scale={[1, 0.5, 1]}>
+            <icosahedronGeometry args={[0.12, 0]} />
+            <meshStandardMaterial
+              color={petalColor}
+              emissive={glowColor}
+              emissiveIntensity={0.16}
+              roughness={0.5}
+              flatShading
+            />
           </mesh>
-          <mesh position={[0, 0.39, 0]}>
-            <sphereGeometry args={[0.035, 10, 10]} />
-            <meshStandardMaterial color="#fff2a6" emissive="#fff2a6" emissiveIntensity={1.1} />
+          {/* bright pollen centre */}
+          <mesh position={[0, 0.43, 0]}>
+            <sphereGeometry args={[0.036, 8, 8]} />
+            <meshStandardMaterial color="#ffe89a" emissive="#ffe89a" emissiveIntensity={0.85} />
           </mesh>
         </group>
       ))}

@@ -113,8 +113,8 @@ function CompleteBanner({
 }
 
 // The gift-givers "held" every garden record — but left them easy, so Noura can
-// take the crown. Rename RECORD_HOLDER below to your own name.
-const RECORD_HOLDER = 'The Champ'
+// take the crown.
+const RECORD_HOLDER = 'Motez'
 const PLAYER_NAME = 'Noura'
 
 const RECORD_PRESETS: Record<string, Array<{ name: string; detail: string }>> = {
@@ -454,10 +454,10 @@ function DriveGame({ progress, total, paused, onStep, onClose }: MiniGameProps) 
 
       spawnRef.current += 1
       setStars((current) => {
-        let next = current.map((star) => ({ ...star, y: star.y + 2.6 }))
+        let next = current.map((star) => ({ ...star, y: star.y + 4.4 }))
 
         // spawn a new star / occasional petal every few ticks
-        if (spawnRef.current % 11 === 0) {
+        if (spawnRef.current % 8 === 0) {
           idRef.current += 1
           const isPetal = Math.random() < 0.28
           next.push({
@@ -513,7 +513,7 @@ function DriveGame({ progress, total, paused, onStep, onClose }: MiniGameProps) 
   return (
     <>
       <p className="minigame-instruction">
-        Steer the little car and gather {total} star fragments under the flowers.
+        Quick — the stars fall fast. Steer to catch {total} fragments before they slip past.
       </p>
       <div
         className="drive-field"

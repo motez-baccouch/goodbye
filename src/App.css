@@ -912,7 +912,8 @@
 /* ---- the final letter, held in the hands ---- */
 
 .final-letter-overlay {
-  background: rgba(3, 4, 12, 0.72);
+  background:
+    radial-gradient(circle at 50% 30%, rgba(20, 14, 30, 0.72), rgba(2, 3, 10, 0.96) 70%);
   animation: overlayFadeIn 1.4s ease;
   display: flex;
   align-items: flex-end;
@@ -1024,8 +1025,10 @@
 .letter-line {
   margin: 0;
   color: #4a3826;
-  font-size: 0.98rem;
-  line-height: 1.6;
+  font-family: 'Caveat', 'Cormorant Garamond', cursive;
+  font-size: 1.6rem;
+  font-weight: 500;
+  line-height: 1.35;
   min-height: 1.2em;
 }
 
@@ -1050,9 +1053,9 @@
 }
 
 .letter-opening {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-family: 'Caveat', 'Cormorant Garamond', cursive;
+  font-size: 2rem;
+  font-weight: 700;
 }
 
 .letter-signature {
@@ -1646,20 +1649,21 @@
   opacity: 0.4;
 }
 
-.reading-page-num {
+/* scoped so the panel's generic light `p` colour can't override these on the cream page */
+.reading-book .reading-page-num {
   margin: 0;
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #8a6f4d;
+  color: #9a7a4f;
 }
 
-.reading-line {
+.reading-book .reading-line {
   margin: 0;
   font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   line-height: 1.45;
-  color: #3f2d1d;
+  color: #3a2a19;
 }
 
 .compass-hud {
