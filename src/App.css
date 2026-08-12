@@ -1944,6 +1944,30 @@
   font-style: italic;
 }
 
+.climb-hud {
+  position: absolute;
+  left: 50%;
+  bottom: max(1.2rem, calc(env(safe-area-inset-bottom, 0) + 1rem));
+  transform: translateX(-50%);
+  z-index: 8;
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+  width: min(30rem, 90vw);
+  pointer-events: auto;
+}
+
+.climb-message {
+  margin: 0;
+  text-align: center;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: clamp(1.1rem, 3vw, 1.5rem);
+  line-height: 1.35;
+  color: #fff6df;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+  animation: captionFade 1.2s ease both;
+}
+
 .orientation-overlay {
   z-index: 30;
 }

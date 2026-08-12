@@ -7,7 +7,7 @@ import { isMusicMuted, notifyFinale, setMusicMuted, startMusic } from './ambient
 import { chapters, finalLetter } from './experienceData'
 import { SparkBurst, StationMiniGame } from './MiniGames'
 
-type StationId = 'gate' | 'archive' | 'lanterns' | 'path' | 'reading' | 'final' | 'piano'
+type StationId = 'gate' | 'archive' | 'lanterns' | 'path' | 'reading' | 'final' | 'piano' | 'lighthouse'
 type SecretId = 'moon' | 'teddy' | 'padel' | 'book' | 'maze' | 'boss' | 'france' | 'cart'
 
 const TOTAL_SECRETS = 8
@@ -52,6 +52,7 @@ const stationPositions: Record<StationId, Vec3> = {
   reading: [9, 0, -33],
   final: [0, 0, -42],
   piano: [-5, 0, -0.5],
+  lighthouse: [-18, 0, -16],
 }
 
 // fixed-position secrets the guiding arrow can point to once the memories are done
@@ -599,6 +600,7 @@ function getNearbyInteractable(player: PlayerSample, gateOpen: boolean): Interac
     { id: 'reading', radius: 3.4 },
     { id: 'final', radius: 3.6 },
     { id: 'piano', radius: 3 },
+    { id: 'lighthouse', radius: 3.4 },
   ]
 
   let nearest: Interactable | null = null
@@ -675,6 +677,8 @@ function getInteractLabel(
       return finalOpen ? 'Read Again' : 'Reveal Letter'
     case 'piano':
       return 'Play a Melody'
+    case 'lighthouse':
+      return 'Climb the Lighthouse'
     default:
       return 'Interact'
   }
@@ -719,6 +723,7 @@ function SceneCanvas() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [pianoPlaying, setPianoPlaying] = useState(false)
   const [secretEnding, setSecretEnding] = useState(false)
+  const [climb, setClimb] = useState<'none' | 'up' | 'top' | 'down'>('none')
   const [detailMessage, setDetailMessage] = useState('')
   const [hintIndex, setHintIndex] = useState(0)
   const [hintVisible, setHintVisible] = useState(false)
@@ -1107,6 +1112,7 @@ function SceneCanvas() {
     Boolean(overlayMode) ||
     Boolean(memoryReveal) ||
     Boolean(activeMiniGame) ||
+    climb !== 'none' ||
     letterVisible ||
     creditsVisible ||
     (deviceProfile.mobile && !deviceProfile.landscape)
@@ -1369,6 +1375,15 @@ function SceneCanvas() {
       setPianoPlaying(true)
       setDetailMessage('A quiet melody drifts out across the moonlit garden.')
       window.setTimeout(() => setPianoPlaying(false), duration || 9000)
+      return
+    }
+
+    if (interactable.id === 'lighthouse') {
+      playTone('door')
+      haptic(14)
+      setMenuOpen(false)
+      setClimb('up')
+      setDetailMessage('Up the spiral stairs…')
     }
   }
 
@@ -1430,6 +1445,12 @@ function SceneCanvas() {
           gateOpen={gateOpen}
           inputBlocked={controlsBlocked}
           seat={seat}
+          climb={climb}
+          onClimbTop={() => setClimb('top')}
+          onClimbBottom={() => {
+            setClimb('none')
+            setDetailMessage('Back on the ground. The lighthouse keeps watch.')
+          }}
           onSample={(sample) => {
             playerPosRef.current = sample
             setPlayerSample(sample)
@@ -1448,6 +1469,7 @@ function SceneCanvas() {
         <Fireworks active={forceFireworks || secretEnding || (finalOpen && !letterVisible && !creditsVisible && !epilogue)} />
         <FranceConstellation visible={finalOpen} />
         <EiffelTower position={[-15.5, 0, -64]} scale={1.35} />
+        <Lighthouse />
         <SecretHitbox secret="boss" position={[0, 1.9, -46]} radius={1.9} />
         <SecretHitbox secret="cart" position={[6.8, 0.7, 3.2]} radius={1.1} />
         <SecretMarker position={[-12.2, 1.15, -3.9]} found={secretsFound.includes('teddy')} />
@@ -1596,6 +1618,18 @@ function SceneCanvas() {
       ) : null}
 
       {showFps ? <FpsMeter /> : null}
+
+      {climb === 'top' ? (
+        <div className="climb-hud">
+          <p className="climb-message">
+            You climbed all that for the view. Worth it — though somewhere down there, the padel
+            ball is still running from you.
+          </p>
+          <button type="button" className="interact-button" onClick={() => setClimb('down')}>
+            Descend
+          </button>
+        </div>
+      ) : null}
 
       {!controlsBlocked && gateOpen && !finalOpen ? (
         <div className="compass-hud">
@@ -2024,6 +2058,9 @@ function FirstPersonRig({
   gateOpen,
   inputBlocked,
   seat,
+  climb,
+  onClimbTop,
+  onClimbBottom,
   onSample,
 }: {
   movementRef: React.MutableRefObject<MovementInput>
@@ -2032,6 +2069,9 @@ function FirstPersonRig({
   gateOpen: boolean
   inputBlocked: boolean
   seat: BenchSeat | null
+  climb: 'none' | 'up' | 'top' | 'down'
+  onClimbTop: () => void
+  onClimbBottom: () => void
   onSample: (sample: PlayerSample) => void
 }) {
   const { camera, clock } = useThree()
@@ -2040,6 +2080,8 @@ function FirstPersonRig({
   const pitchRef = useRef(-0.03)
   const sampleTimeRef = useRef(0)
   const strideRef = useRef(0)
+  const climbTRef = useRef(0)
+  const climbRef = useRef<'none' | 'up' | 'top' | 'down'>('none')
   const keysRef = useRef({ forward: false, back: false, left: false, right: false })
 
   useEffect(() => {
@@ -2082,7 +2124,42 @@ function FirstPersonRig({
     }
   }, [seat])
 
+  useEffect(() => {
+    climbRef.current = climb
+  }, [climb])
+
   useFrame((_, delta) => {
+    // scripted lighthouse ascent: spiral the camera up the tower and survey
+    const climbNow = climbRef.current
+    if (climbNow !== 'none') {
+      const target = climbNow === 'down' ? 0 : 1
+      climbTRef.current = THREE.MathUtils.damp(climbTRef.current, target, 2.4, delta)
+      const t = climbTRef.current
+      const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
+      const radius = LIGHTHOUSE_RADIUS + 0.5
+      const height = t * LIGHTHOUSE_TOP
+      const cx = LIGHTHOUSE_POS[0] + Math.cos(angle) * radius
+      const cz = LIGHTHOUSE_POS[2] + Math.sin(angle) * radius
+      camera.position.set(cx, 1.5 + height, cz)
+
+      if (climbNow === 'top' && t > 0.96) {
+        // slowly survey the whole moonlit garden spread out far below
+        const survey = clock.elapsedTime * 0.09
+        camera.lookAt(cx + Math.cos(survey) * 12, 1.5 + height - 8.5, cz + Math.sin(survey) * 12)
+      } else {
+        const tangent = angle + (Math.PI / 2) * (climbNow === 'down' ? -1 : 1)
+        camera.lookAt(cx + Math.cos(tangent) * 3, 1.5 + height + (climbNow === 'down' ? -2 : 3), cz + Math.sin(tangent) * 3)
+      }
+
+      if (climbNow === 'up' && t > 0.985) {
+        onClimbTop()
+      }
+      if (climbNow === 'down' && t < 0.015) {
+        onClimbBottom()
+      }
+      return
+    }
+
     if (!inputBlocked) {
       yawRef.current += lookRef.current.dx * 0.0032
       pitchRef.current = clamp(pitchRef.current - lookRef.current.dy * 0.0022, -0.42, 0.32)
@@ -2153,6 +2230,7 @@ function FirstPersonRig({
       { x: 0, z: -2, radius: 1.2 },
       { x: 0, z: -46, radius: 1.35 },
       { x: -5, z: -0.5, radius: 1.1 },
+      { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 3 },
     ]
 
     colliders.forEach((collider) => {
@@ -2941,18 +3019,18 @@ const CONSTELLATION_STAR: Vec3[] = [
   [1.18, -1.62, 0],
   [0, 2, 0],
 ]
-const CONSTELLATION_HEART: Vec3[] = [
-  [0, 1.2, 0],
-  [0.9, 1.8, 0],
-  [1.6, 1.4, 0],
-  [1.7, 0.4, 0],
-  [0.9, -0.7, 0],
-  [0, -1.6, 0],
-  [-0.9, -0.7, 0],
-  [-1.7, 0.4, 0],
-  [-1.6, 1.4, 0],
-  [-0.9, 1.8, 0],
-  [0, 1.2, 0],
+const CONSTELLATION_EIFFEL: Vec3[] = [
+  [-1, 0, 0],
+  [-0.5, 1.3, 0],
+  [-0.22, 2.5, 0],
+  [0, 3.4, 0],
+  [0.22, 2.5, 0],
+  [0.5, 1.3, 0],
+  [1, 0, 0],
+  [-0.5, 1.3, 0],
+  [0.5, 1.3, 0],
+  [-0.28, 2.3, 0],
+  [0.28, 2.3, 0],
 ]
 const CONSTELLATION_W: Vec3[] = [
   [-2, 0.5, 0],
@@ -2993,12 +3071,40 @@ function SkyConstellation({
   )
 }
 
+// a cheeky little smiley in the stars, hanging over the lantern grove
+const SMILEY_SMILE: Vec3[] = [[-1, -0.1, 0], [-0.6, -0.7, 0], [0, -0.95, 0], [0.6, -0.7, 0], [1, -0.1, 0]]
+const SMILEY_EYES: Vec3[] = [[-0.5, 0.6, 0], [0.5, 0.6, 0]]
+
+function SmileyConstellation({ position, scale = 1 }: { position: Vec3; scale?: number }) {
+  const glowTexture = useMemo(() => createGlowTexture(), [])
+  const stars = useMemo(() => [...SMILEY_SMILE, ...SMILEY_EYES], [])
+
+  return (
+    <group position={position} scale={scale}>
+      <Line points={SMILEY_SMILE} color="#ffe6a1" lineWidth={1.4} transparent opacity={0.34} />
+      {stars.map((point, index) => (
+        <group key={index} position={point}>
+          <mesh>
+            <sphereGeometry args={[0.09, 8, 8]} />
+            <meshBasicMaterial color="#fff6d8" fog={false} />
+          </mesh>
+          <sprite scale={[0.8, 0.8, 1]}>
+            <spriteMaterial map={glowTexture} color="#ffe6a1" transparent opacity={0.6} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
+          </sprite>
+        </group>
+      ))}
+    </group>
+  )
+}
+
 function SkyConstellations() {
   return (
     <group>
-      <SkyConstellation points={CONSTELLATION_STAR} position={[-19, 23, -64]} scale={1.5} color="#ffe6a1" />
-      <SkyConstellation points={CONSTELLATION_HEART} position={[17, 25, -66]} scale={1.3} color="#ffb3dc" />
-      <SkyConstellation points={CONSTELLATION_W} position={[3, 29, -68]} scale={1.7} color="#bcccff" />
+      <SkyConstellation points={CONSTELLATION_STAR} position={[-28, 30, -82]} scale={2} color="#ffe6a1" />
+      <SkyConstellation points={CONSTELLATION_EIFFEL} position={[24, 27, -86]} scale={2.4} color="#cfe0ff" />
+      <SkyConstellation points={CONSTELLATION_W} position={[2, 36, -90]} scale={2.2} color="#bcccff" />
+      {/* a cheeky smiley hanging over the lantern grove */}
+      <SmileyConstellation position={[15, 22, -56]} scale={2} />
     </group>
   )
 }
@@ -3048,6 +3154,94 @@ function NouraConstellation({ visible }: { visible: boolean }) {
         </group>
       ))}
       <Sparkles count={30} scale={[9, 3.5, 2]} position={[3.5, 1, 0]} size={2.6} speed={0.18} color="#fff0bd" />
+    </group>
+  )
+}
+
+// The giant lighthouse: a spiral staircase winds up a tall tower to a lantern
+// room with a slowly-sweeping beam. Climbing it is a scripted camera ascent.
+const LIGHTHOUSE_POS: Vec3 = [-18, 0, -16]
+const LIGHTHOUSE_TOP = 16.5
+const LIGHTHOUSE_TURNS = 2.75
+const LIGHTHOUSE_RADIUS = 1.7
+
+function Lighthouse() {
+  const beamRef = useRef<THREE.Group>(null)
+
+  useFrame((_, delta) => {
+    if (beamRef.current) {
+      beamRef.current.rotation.y += delta * 0.5
+    }
+  })
+
+  return (
+    <group position={LIGHTHOUSE_POS}>
+      {/* stone base */}
+      <mesh position={[0, 0.45, 0]}>
+        <cylinderGeometry args={[2.7, 3.1, 0.9, 22]} />
+        <meshStandardMaterial color="#4a4e64" roughness={0.85} />
+      </mesh>
+      {/* tapered tower */}
+      <mesh position={[0, LIGHTHOUSE_TOP / 2 + 0.6, 0]}>
+        <cylinderGeometry args={[1.5, 2.5, LIGHTHOUSE_TOP, 22]} />
+        <meshStandardMaterial color="#eae6f0" roughness={0.7} />
+      </mesh>
+      {/* two soft accent bands */}
+      {[0.36, 0.68].map((f, index) => (
+        <mesh key={index} position={[0, 0.6 + f * LIGHTHOUSE_TOP, 0]}>
+          <cylinderGeometry args={[2.5 - f * 1 + 0.03, 2.5 - f * 1 + 0.03, 1.1, 22]} />
+          <meshStandardMaterial color="#c58a86" roughness={0.7} />
+        </mesh>
+      ))}
+      {/* visible spiral staircase winding up the outside */}
+      {Array.from({ length: 42 }).map((_, index) => {
+        const t = index / 42
+        const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
+        const height = t * LIGHTHOUSE_TOP
+        return (
+          <mesh
+            key={index}
+            position={[Math.cos(angle) * LIGHTHOUSE_RADIUS, 0.5 + height, Math.sin(angle) * LIGHTHOUSE_RADIUS]}
+            rotation={[0, -angle, 0]}
+          >
+            <boxGeometry args={[1, 0.12, 0.5]} />
+            <meshStandardMaterial color="#9a8fac" roughness={0.7} />
+          </mesh>
+        )
+      })}
+      {/* gallery platform + railing */}
+      <mesh position={[0, LIGHTHOUSE_TOP + 0.7, 0]}>
+        <cylinderGeometry args={[2.3, 2.3, 0.3, 22]} />
+        <meshStandardMaterial color="#4a4e64" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, LIGHTHOUSE_TOP + 1.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[2.2, 0.06, 8, 26]} />
+        <meshStandardMaterial color="#3a3e52" roughness={0.7} />
+      </mesh>
+      {/* lantern room */}
+      <mesh position={[0, LIGHTHOUSE_TOP + 1.9, 0]}>
+        <cylinderGeometry args={[1.35, 1.5, 1.7, 16]} />
+        <meshStandardMaterial color="#2a2e3e" roughness={0.6} metalness={0.2} />
+      </mesh>
+      {/* the light */}
+      <mesh position={[0, LIGHTHOUSE_TOP + 1.9, 0]}>
+        <sphereGeometry args={[0.85, 18, 18]} />
+        <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={2.6} toneMapped={false} fog={false} />
+      </mesh>
+      {/* cap */}
+      <mesh position={[0, LIGHTHOUSE_TOP + 3, 0]}>
+        <coneGeometry args={[1.55, 1, 16]} />
+        <meshStandardMaterial color="#3a3e52" roughness={0.7} />
+      </mesh>
+      {/* sweeping beam */}
+      <group ref={beamRef} position={[0, LIGHTHOUSE_TOP + 1.9, 0]}>
+        <mesh position={[4.5, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <coneGeometry args={[1.6, 9, 18, 1, true]} />
+          <meshBasicMaterial color="#fff3cd" transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} fog={false} />
+        </mesh>
+      </group>
+      <LampGlow position={[0, LIGHTHOUSE_TOP + 1.9, 0]} scale={6} color="#ffe9a8" opacity={0.4} />
+      <pointLight position={[0, LIGHTHOUSE_TOP + 1.9, 0]} intensity={18} distance={34} color="#ffe9c0" />
     </group>
   )
 }
