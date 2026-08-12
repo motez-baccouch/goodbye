@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Clone, Float, Line, RoundedBox, Sparkles, Stars, Text, useGLTF, useTexture } from '@react-three/drei'
+import { Clone, Float, Line, RoundedBox, Sparkles, Stars, Text, useGLTF } from '@react-three/drei'
 import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { haptic, playFootstep, playMelody, playTone, unlockAudio } from './audioEngine'
@@ -264,138 +264,58 @@ function createTextureCanvas(width: number, height: number) {
   return canvas
 }
 
-function drawStone(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  rotation: number,
-  fill: string,
-) {
-  context.save()
-  context.translate(x, y)
-  context.rotate(rotation)
-  context.fillStyle = fill
-  context.beginPath()
-  context.roundRect(-width / 2, -height / 2, width, height, Math.min(width, height) * 0.4)
-  context.fill()
-  // top-light bevel
-  context.fillStyle = 'rgba(255, 255, 255, 0.09)'
-  context.beginPath()
-  context.roundRect(-width / 2, -height / 2, width, height * 0.4, Math.min(width, height) * 0.4)
-  context.fill()
-  context.restore()
-}
-
-const stonePalette = ['#8f92ac', '#9a94b4', '#83879f', '#a09cb8', '#8b8ea6']
-
-function createCobbleTexture() {
-  const canvas = createTextureCanvas(1024, 1024)
+// A SMOOTH, low-frequency stone surface (soft overlapping blobs, no hard edges
+// or fine lines). Detailed stone textures shred into streaks at grazing angles;
+// this stays clean when you look along a path. Deterministic (pseudoRandom).
+function createSoftStoneTexture(base: string, stone: string, seedOffset = 0) {
+  const canvas = createTextureCanvas(256, 256)
   const context = canvas.getContext('2d')
 
   if (!context) {
     return new THREE.Texture()
   }
 
-  // grout
-  context.fillStyle = '#3c3f55'
-  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.fillStyle = base
+  context.fillRect(0, 0, 256, 256)
 
-  // concentric rings of cobblestones around the canvas centre
-  const cx = canvas.width / 2
-  const cy = canvas.height / 2
-
-  for (let ring = 1; ring <= 11; ring += 1) {
-    const radius = ring * 46
-    const count = Math.max(6, Math.round(ring * 7.2))
-
-    for (let index = 0; index < count; index += 1) {
-      const angle = (index / count) * Math.PI * 2 + ring * 0.35
-      const x = cx + Math.cos(angle) * radius
-      const y = cy + Math.sin(angle) * radius
-      const size = 30 + Math.random() * 12
-      drawStone(
-        context,
-        x,
-        y,
-        size * 1.25,
-        size * 0.85,
-        angle + Math.PI / 2,
-        stonePalette[(ring + index) % stonePalette.length],
-      )
-    }
+  // soft, large stones fading into the base — reads as stone, no sharp detail
+  for (let index = 0; index < 9; index += 1) {
+    const seed = index * 3 + seedOffset
+    const x = pseudoRandom(seed + 1) * 256
+    const y = pseudoRandom(seed + 2) * 256
+    const radius = 42 + pseudoRandom(seed + 3) * 48
+    const gradient = context.createRadialGradient(x - radius * 0.3, y - radius * 0.3, radius * 0.1, x, y, radius)
+    gradient.addColorStop(0, stone)
+    gradient.addColorStop(0.62, stone)
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    context.globalAlpha = 0.45 + pseudoRandom(seed + 4) * 0.32
+    context.fillStyle = gradient
+    context.beginPath()
+    context.arc(x, y, radius, 0, Math.PI * 2)
+    context.fill()
   }
+  context.globalAlpha = 1
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
   texture.anisotropy = 16
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.needsUpdate = true
   return texture
+}
+
+function createCobbleTexture() {
+  return createSoftStoneTexture('#3a3d52', '#8388a4', 0)
 }
 
 function createFlagstoneTexture() {
-  const canvas = createTextureCanvas(1024, 1024)
-  const context = canvas.getContext('2d')
-
-  if (!context) {
-    return new THREE.Texture()
-  }
-
-  context.fillStyle = '#3a3d52'
-  context.fillRect(0, 0, canvas.width, canvas.height)
-
-  const cols = 7
-  const rows = 9
-
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      const x = ((col + 0.5 + (row % 2 ? 0.35 : 0)) / cols) * canvas.width
-      const y = ((row + 0.5) / rows) * canvas.height
-      const width = (canvas.width / cols) * (0.82 + Math.random() * 0.14)
-      const height = (canvas.height / rows) * (0.78 + Math.random() * 0.16)
-      drawStone(context, x, y, width, height, (Math.random() - 0.5) * 0.1, stonePalette[(row * cols + col) % stonePalette.length])
-    }
-  }
-
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
-  texture.wrapS = THREE.RepeatWrapping
-  texture.wrapT = THREE.RepeatWrapping
-  texture.anisotropy = 16
-  return texture
+  return createSoftStoneTexture('#363a4e', '#787d99', 30)
 }
 
 function createSteppingPathTexture() {
-  const canvas = createTextureCanvas(256, 512)
-  const context = canvas.getContext('2d')
-
-  if (!context) {
-    return new THREE.Texture()
-  }
-
-  // dark grout
-  context.fillStyle = '#2f3348'
-  context.fillRect(0, 0, canvas.width, canvas.height)
-
-  // neat fitted cobbles, staggered brick-style — much tidier than big pills
-  const cols = 3
-  const rows = 8
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      const x = ((col + 0.5 + (row % 2 ? 0.3 : 0)) / cols) * canvas.width
-      const y = ((row + 0.5) / rows) * canvas.height
-      const width = (canvas.width / cols) * (0.82 + Math.random() * 0.12)
-      const height = (canvas.height / rows) * (0.8 + Math.random() * 0.12)
-      drawStone(context, x, y, width, height, (Math.random() - 0.5) * 0.1, stonePalette[(row * cols + col) % stonePalette.length])
-    }
-  }
-
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
-  texture.wrapS = THREE.RepeatWrapping
-  texture.wrapT = THREE.RepeatWrapping
-  texture.anisotropy = 16
-  return texture
+  return createSoftStoneTexture('#41465e', '#7d8299', 60)
 }
 
 function createWoodTexture(primary: string, secondary: string, accent: string) {
@@ -798,6 +718,7 @@ function SceneCanvas() {
   const [overlayMode, setOverlayMode] = useState<'intro' | 'help' | 'journal' | 'map' | null>('intro')
   const [menuOpen, setMenuOpen] = useState(false)
   const [pianoPlaying, setPianoPlaying] = useState(false)
+  const [secretEnding, setSecretEnding] = useState(false)
   const [detailMessage, setDetailMessage] = useState('')
   const [hintIndex, setHintIndex] = useState(0)
   const [hintVisible, setHintVisible] = useState(false)
@@ -996,6 +917,25 @@ function SceneCanvas() {
 
     return () => window.clearTimeout(timeoutId)
   }, [finalUnlocked, finalOpen])
+
+  // the secret ending: find every hidden light, and the sky spells her name
+  useEffect(() => {
+    if (secretsFound.length < TOTAL_SECRETS) {
+      return
+    }
+
+    const soundId = window.setTimeout(() => {
+      playTone('france')
+      haptic([16, 60, 16, 60, 40])
+      setCometNonce((current) => current + 1)
+    }, 300)
+    const revealId = window.setTimeout(() => setSecretEnding(true), 1600)
+
+    return () => {
+      window.clearTimeout(soundId)
+      window.clearTimeout(revealId)
+    }
+  }, [secretsFound.length])
 
   const padelFleeCountRef = useRef(0)
   const creditsShownRef = useRef(false)
@@ -1502,9 +1442,10 @@ function SceneCanvas() {
           <GardenModels />
         </Suspense>
         <SkyConstellations />
+        <NouraConstellation visible={secretEnding} />
         <Comet nonce={cometNonce} />
         <ShootingStars />
-        <Fireworks active={forceFireworks || (finalOpen && !letterVisible && !creditsVisible && !epilogue)} />
+        <Fireworks active={forceFireworks || secretEnding || (finalOpen && !letterVisible && !creditsVisible && !epilogue)} />
         <FranceConstellation visible={finalOpen} />
         <EiffelTower position={[-15.5, 0, -64]} scale={1.35} />
         <SecretHitbox secret="boss" position={[0, 1.9, -46]} radius={1.9} />
@@ -1515,6 +1456,7 @@ function SceneCanvas() {
         <SecretMarker position={[6.8, 1.2, 3.2]} found={secretsFound.includes('cart')} />
         <SecretMarker position={[0, 4.2, -18]} found={secretsFound.includes('maze')} />
         <SecretMarker position={[9, 17, -58]} found={secretsFound.includes('moon')} />
+        <WishLanterns />
         <Fireflies count={deviceProfile.mobile ? (epilogue ? 40 : 26) : epilogue ? 60 : 42} />
         <WindPetals count={deviceProfile.mobile ? (epilogue ? 34 : 22) : epilogue ? 50 : 34} />
         <Teddy />
@@ -1822,6 +1764,10 @@ function SceneCanvas() {
                     <p>
                       Collect every keepsake. The last letter will arrive from the sky.
                     </p>
+                    <p className="intro-secret-hint">
+                      And little secrets glow all around the garden — find every one for a secret
+                      ending. Tap anything that shimmers. ✦
+                    </p>
                     <p className="intro-sound-hint">Best with sound on.</p>
                   </div>
                 </div>
@@ -2010,6 +1956,37 @@ function SceneCanvas() {
               }}
             >
               Return to the garden
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {secretEnding ? (
+        <div className="experience-overlay secret-ending-overlay">
+          <div className="secret-ending-inner">
+            <SparkBurst count={40} />
+            <p className="secret-ending-kicker" style={{ animationDelay: '2.2s' }}>The secret ending</p>
+            <p className="secret-ending-line" style={{ animationDelay: '2.6s' }}>
+              You found every hidden light in the garden.
+            </p>
+            <p className="secret-ending-line secret-ending-cue" style={{ animationDelay: '3.2s' }}>
+              Look up — the sky is spelling your name.
+            </p>
+            <p className="secret-ending-line" style={{ animationDelay: '4s' }}>
+              Some people simply pass through a place. You lit the whole thing up — and it will keep
+              glowing long after you go.
+            </p>
+            <p className="secret-ending-line" style={{ animationDelay: '4.8s' }}>
+              Thank you for everything, Noura.
+            </p>
+            <p className="credits-carlos" style={{ animationDelay: '5.6s' }}>go carlos ✦</p>
+            <button
+              type="button"
+              className="credits-return"
+              style={{ animationDelay: '6.4s' }}
+              onClick={() => setSecretEnding(false)}
+            >
+              Back to the garden
             </button>
           </div>
         </div>
@@ -2245,21 +2222,6 @@ function FirstPersonRig({
   return null
 }
 
-function configureGrassTexture(texture: THREE.Texture | THREE.Texture[]) {
-  const textures = Array.isArray(texture) ? texture : [texture]
-  textures.forEach((entry) => {
-    entry.colorSpace = THREE.SRGBColorSpace
-    entry.wrapS = THREE.RepeatWrapping
-    entry.wrapT = THREE.RepeatWrapping
-    // maximum anisotropy + trilinear mipmaps kill the grazing-angle streaking
-    entry.anisotropy = 16
-    entry.minFilter = THREE.LinearMipmapLinearFilter
-    entry.magFilter = THREE.LinearFilter
-    entry.generateMipmaps = true
-    entry.needsUpdate = true
-  })
-}
-
 // A deliberately SMOOTH, low-frequency lawn. A detailed grass photo shreds into
 // streaks at grazing angles no matter the anisotropy; this has no fine detail to
 // alias, so the ground stays clean when you look along it. Grass tufts + flowers
@@ -2322,18 +2284,14 @@ function createMeadowTexture() {
 }
 
 function GroundPlane() {
-  const cobbleMap = useTexture('/assets/textures/cobblestone.jpg', configureGrassTexture)
-  // smooth procedural lawn — never streaks at grazing angles
+  // smooth procedural surfaces — never streak at grazing angles
   const grass = useMemo(() => createMeadowTexture(), [])
   const cobble = useMemo(() => {
-    const cloned = cobbleMap.clone()
-    cloned.repeat.set(4, 4)
-    cloned.anisotropy = 16
-    cloned.minFilter = THREE.LinearMipmapLinearFilter
-    cloned.generateMipmaps = true
-    cloned.needsUpdate = true
-    return cloned
-  }, [cobbleMap])
+    const texture = createCobbleTexture()
+    texture.repeat.set(3, 3)
+    texture.needsUpdate = true
+    return texture
+  }, [])
 
   return (
     <group>
@@ -2753,6 +2711,68 @@ function ShootingStars() {
   )
 }
 
+// A single paper wish-lantern that drifts slowly up into the night and loops.
+function WishLantern({ x, z, seed, speed }: { x: number; z: number; seed: number; speed: number }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const glowTexture = useMemo(() => createGlowTexture(), [])
+
+  useFrame(({ clock }) => {
+    const group = groupRef.current
+
+    if (!group) {
+      return
+    }
+
+    const cycle = (clock.elapsedTime * speed + seed) % 1
+    group.position.set(
+      x + Math.sin(clock.elapsedTime * 0.3 + seed * 6) * 0.9,
+      0.6 + cycle * 21,
+      z + Math.cos(clock.elapsedTime * 0.25 + seed * 4) * 0.6,
+    )
+    // fade in low, fade out high via scale so the loop is seamless
+    group.scale.setScalar(Math.max(0.05, Math.sin(cycle * Math.PI) * 1.1))
+    group.rotation.y = clock.elapsedTime * 0.4 + seed
+  })
+
+  return (
+    <group ref={groupRef} position={[x, 0.6, z]}>
+      <mesh>
+        <boxGeometry args={[0.26, 0.36, 0.26]} />
+        <meshStandardMaterial color="#ffcf8a" emissive="#ffb45a" emissiveIntensity={1.7} toneMapped={false} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.22, 0]}>
+        <boxGeometry args={[0.14, 0.05, 0.14]} />
+        <meshStandardMaterial color="#5a4436" roughness={0.8} />
+      </mesh>
+      <sprite scale={[1.5, 1.5, 1]}>
+        <spriteMaterial map={glowTexture} color="#ffcf8a" transparent opacity={0.5} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
+      </sprite>
+    </group>
+  )
+}
+
+function WishLanterns() {
+  const lanterns = useMemo(
+    () => [
+      { x: -10, z: -6, seed: 0.05, speed: 0.03 },
+      { x: 8, z: -12, seed: 0.32, speed: 0.026 },
+      { x: -4, z: -20, seed: 0.58, speed: 0.034 },
+      { x: 11, z: -30, seed: 0.14, speed: 0.028 },
+      { x: -12, z: -34, seed: 0.77, speed: 0.031 },
+      { x: 3, z: -4, seed: 0.9, speed: 0.024 },
+    ],
+    [],
+  )
+
+  return (
+    <group>
+      {lanterns.map((lantern, index) => (
+        <WishLantern key={index} x={lantern.x} z={lantern.z} seed={lantern.seed} speed={lantern.speed} />
+      ))}
+    </group>
+  )
+}
+
 function Comet({ nonce }: { nonce: number }) {
   const groupRef = useRef<THREE.Group>(null)
   const progressRef = useRef({ active: false, t: 0 })
@@ -2979,6 +2999,55 @@ function SkyConstellations() {
       <SkyConstellation points={CONSTELLATION_STAR} position={[-19, 23, -64]} scale={1.5} color="#ffe6a1" />
       <SkyConstellation points={CONSTELLATION_HEART} position={[17, 25, -66]} scale={1.3} color="#ffb3dc" />
       <SkyConstellation points={CONSTELLATION_W} position={[3, 29, -68]} scale={1.7} color="#bcccff" />
+    </group>
+  )
+}
+
+// Letters drawn as star-strokes for the secret ending: the sky spells N O U R A.
+const LETTER_N: Vec3[] = [[0, 0, 0], [0, 2, 0], [0.9, 0, 0], [0.9, 2, 0]]
+const LETTER_O: Vec3[] = [
+  [0.1, 0.5, 0], [0, 1.2, 0], [0.15, 1.8, 0], [0.5, 2, 0], [0.85, 1.8, 0], [1, 1.2, 0], [0.9, 0.5, 0], [0.5, 0, 0], [0.1, 0.5, 0],
+]
+const LETTER_U: Vec3[] = [[0, 2, 0], [0, 0.5, 0], [0.25, 0.05, 0], [0.65, 0.05, 0], [0.9, 0.5, 0], [0.9, 2, 0]]
+const LETTER_R: Vec3[] = [[0, 0, 0], [0, 2, 0], [0.7, 2, 0], [0.95, 1.55, 0], [0.7, 1.05, 0], [0, 1.05, 0], [0.55, 1.05, 0], [0.95, 0, 0]]
+const LETTER_A: Vec3[] = [[0, 0, 0], [0.45, 2, 0], [0.9, 0, 0], [0.68, 0.9, 0], [0.22, 0.9, 0]]
+const NOURA_LETTERS = [LETTER_N, LETTER_O, LETTER_U, LETTER_R, LETTER_A]
+
+function NouraConstellation({ visible }: { visible: boolean }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const glowTexture = useMemo(() => createGlowTexture(), [])
+
+  useFrame((_, delta) => {
+    const group = groupRef.current
+
+    if (!group) {
+      return
+    }
+
+    const scale = THREE.MathUtils.damp(group.scale.x, visible ? 2 : 0.0001, 2, delta)
+    group.scale.setScalar(scale)
+    group.visible = scale > 0.02
+  })
+
+  return (
+    <group ref={groupRef} position={[-6.5, 20, -60]} scale={0.0001} visible={false}>
+      {NOURA_LETTERS.map((points, index) => (
+        <group key={index} position={[index * 1.6, 0, 0]}>
+          <Line points={points} color="#ffe9a8" lineWidth={1.8} transparent opacity={0.9} />
+          {points.map((point, pointIndex) => (
+            <group key={pointIndex} position={point}>
+              <mesh>
+                <sphereGeometry args={[0.07, 8, 8]} />
+                <meshBasicMaterial color="#fff6d8" fog={false} />
+              </mesh>
+              <sprite scale={[0.6, 0.6, 1]}>
+                <spriteMaterial map={glowTexture} color="#ffe9a8" transparent opacity={0.75} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
+              </sprite>
+            </group>
+          ))}
+        </group>
+      ))}
+      <Sparkles count={30} scale={[9, 3.5, 2]} position={[3.5, 1, 0]} size={2.6} speed={0.18} color="#fff0bd" />
     </group>
   )
 }
@@ -4660,30 +4729,51 @@ function StationTitle({
   highlighted: boolean
 }) {
   const cullRef = useRef<THREE.Group>(null)
+  const billboardRef = useRef<THREE.Group>(null)
   const worldPosition = useMemo(() => new THREE.Vector3(), [])
 
-  // only show titles for nearby stations so the skyline stays uncluttered
+  // only show titles for nearby stations, and always turn them to face the
+  // camera so the label is upright and readable from any approach angle
   useFrame(({ camera }) => {
     const group = cullRef.current
 
     if (group) {
       group.getWorldPosition(worldPosition)
-      group.visible = worldPosition.distanceTo(camera.position) < 17
+      group.visible = worldPosition.distanceTo(camera.position) < 18
+    }
+
+    if (billboardRef.current) {
+      billboardRef.current.quaternion.copy(camera.quaternion)
     }
   })
 
   return (
     <group ref={cullRef} position={position}>
-      <Float speed={1.2} floatIntensity={0.14}>
-        <group>
-          <Text fontSize={0.24} color={highlighted ? '#fff8d7' : '#f6ecff'} anchorX="center">
+      <group ref={billboardRef}>
+        <Float speed={1.2} floatIntensity={0.14}>
+          <Text
+            fontSize={0.26}
+            color={highlighted ? '#fff8d7' : '#f6ecff'}
+            anchorX="center"
+            outlineWidth={0.014}
+            outlineColor="#0a0c18"
+            outlineOpacity={0.9}
+          >
             {title}
           </Text>
-          <Text fontSize={0.11} position={[0, -0.32, 0]} color="#d8cef6" anchorX="center">
+          <Text
+            fontSize={0.12}
+            position={[0, -0.34, 0]}
+            color="#e4dcff"
+            anchorX="center"
+            outlineWidth={0.008}
+            outlineColor="#0a0c18"
+            outlineOpacity={0.85}
+          >
             {subtitle}
           </Text>
-        </group>
-      </Float>
+        </Float>
+      </group>
     </group>
   )
 }

@@ -390,6 +390,10 @@ export function haptic(pattern: number | number[] = 12) {
 }
 
 // A gentle, tender piano melody for the garden piano. Returns its length in ms.
+//
+// Some things are easier to say in a melody than out loud — so this one quietly
+// carries what the letter left unsaid. That stays here, in the source, and
+// nowhere else. 🌹
 export function playMelody(): number {
   const context = getContext()
 

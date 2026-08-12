@@ -1885,6 +1885,65 @@
   pointer-events: none;
 }
 
+.intro-secret-hint {
+  font-size: 0.86rem;
+  font-style: italic;
+  color: #7a5c2e;
+  line-height: 1.4;
+}
+
+/* the secret ending: the sky (name constellation + fireworks) shows first,
+   then the message gently darkens in over it */
+.secret-ending-overlay {
+  background: rgba(3, 4, 12, 0);
+  animation: secretDarken 3s ease 2s forwards;
+  z-index: 42;
+}
+
+@keyframes secretDarken {
+  to {
+    background: rgba(3, 4, 12, 0.84);
+  }
+}
+
+.secret-ending-inner {
+  position: relative;
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  text-align: center;
+  padding: 1.4rem;
+  max-width: 34rem;
+  max-height: 96dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.secret-ending-kicker {
+  margin: 0;
+  opacity: 0;
+  animation: letterLineIn 2s ease forwards;
+  font-size: 0.8rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 226, 170, 0.85);
+}
+
+.secret-ending-line {
+  margin: 0;
+  opacity: 0;
+  animation: letterLineIn 2s ease forwards;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: clamp(1.2rem, 3.5vw, 1.7rem);
+  line-height: 1.4;
+  color: #fff3df;
+}
+
+.secret-ending-cue {
+  color: #ffe6a1;
+  font-style: italic;
+}
+
 .orientation-overlay {
   z-index: 30;
 }
