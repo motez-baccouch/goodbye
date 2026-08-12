@@ -389,11 +389,17 @@ export function haptic(pattern: number | number[] = 12) {
   }
 }
 
-// A gentle, tender piano melody for the garden piano. Returns its length in ms.
+// The garden piano plays the opening of Beethoven's "Moonlight" Sonata
+// (Op. 27 No. 2, Adagio sostenuto) — a real piece, transcribed by hand from the
+// public-domain score: the C#-minor triplet ostinato, the descending octave
+// ground in the bass, and the sighing dotted melody, closing quietly on the
+// minor tonic that never resolves to major.
 //
-// Some things are easier to say in a melody than out loud — so this one quietly
-// carries what the letter left unsaid. That stays here, in the source, and
-// nowhere else. 🌹
+// It is here for its own reasons — a song written around a love the composer
+// could not keep, and an ending that stays sad on purpose. That reading lives
+// in this comment and nowhere the visitor can read it. 🌹
+//
+// Returns its length in ms.
 export function playMelody(): number {
   const context = getContext()
 
@@ -402,34 +408,35 @@ export function playMelody(): number {
   }
 
   unlockAudio()
-  const start = context.currentTime + 0.12
-  const beat = 0.46
+  const start = context.currentTime + 0.15
+  const tnote = 0.28 // one triplet eighth — the slow Adagio pulse
+  const beat = tnote * 3 // a quarter-note beat = three triplet notes
 
-  // a shared delay so the notes bloom with a little space
+  // a long, dark bloom so each note rings out in the space
   const delay = context.createDelay(1)
-  delay.delayTime.setValueAtTime(0.29, start)
+  delay.delayTime.setValueAtTime(0.33, start)
   const feedback = context.createGain()
-  feedback.gain.setValueAtTime(0.3, start)
+  feedback.gain.setValueAtTime(0.26, start)
   const delayOut = context.createGain()
-  delayOut.gain.setValueAtTime(0.45, start)
+  delayOut.gain.setValueAtTime(0.4, start)
   delay.connect(feedback)
   feedback.connect(delay)
   delay.connect(delayOut)
   delayOut.connect(context.destination)
 
-  // a fuller piano voice: fundamental + harmonics, bright attack, a lowpass that
-  // closes over time and a slight detune — far closer to a real struck string
-  const piano = (frequency: number, at: number, duration: number, volume = 0.06) => {
+  // a struck-string voice: fundamental + harmonics, soft attack, a lowpass that
+  // closes over the note's life and a touch of detune for warmth
+  const piano = (frequency: number, at: number, duration: number, volume = 0.05) => {
     const gain = context.createGain()
     gain.gain.setValueAtTime(0.0001, at)
-    gain.gain.exponentialRampToValueAtTime(volume, at + 0.006)
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.4), at + 0.16)
+    gain.gain.exponentialRampToValueAtTime(volume, at + 0.01)
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.4), at + 0.2)
     gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
 
     const filter = context.createBiquadFilter()
     filter.type = 'lowpass'
-    filter.frequency.setValueAtTime(4600, at)
-    filter.frequency.exponentialRampToValueAtTime(850, at + duration)
+    filter.frequency.setValueAtTime(3600, at)
+    filter.frequency.exponentialRampToValueAtTime(720, at + duration)
 
     gain.connect(filter)
     filter.connect(context.destination)
@@ -437,9 +444,9 @@ export function playMelody(): number {
 
     const harmonics: Array<[number, number]> = [
       [1, 1],
-      [2, 0.34],
-      [3, 0.15],
-      [4, 0.07],
+      [2, 0.3],
+      [3, 0.12],
+      [4, 0.05],
     ]
     harmonics.forEach(([mult, amp], index) => {
       const osc = context.createOscillator()
@@ -451,45 +458,67 @@ export function playMelody(): number {
       osc.connect(partial)
       partial.connect(gain)
       osc.start(at)
-      osc.stop(at + duration + 0.1)
+      osc.stop(at + duration + 0.12)
     })
   }
 
-  const F = {
-    C2: 65.41, D2: 73.42, E2: 82.41, F2: 87.31, G2: 98, A2: 110,
-    C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196, A3: 220, B3: 246.94,
-    C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88,
-    C5: 523.25, D5: 587.33, E5: 659.25,
+  // the notes the piece needs (C# minor)
+  const N = {
+    Fs1: 46.25, Gs1: 51.91, A1: 55.0, B1: 61.74, Cs2: 69.3,
+    Gs2: 103.83, Cs3: 138.59, E3: 164.81, Gs3: 207.65, A3: 220.0,
+    Bs3: 261.63, Cs4: 277.18, Ds4: 311.13, D4: 293.66, E4: 329.63,
+    Fs4: 369.99, Gs4: 415.3, A4: 440.0, B4: 493.88, Cs5: 554.37,
   }
 
-  // gentle I–V–vi–IV progression, arpeggiated in the left hand
-  const progression = [
-    { root: F.C3, third: F.E3, fifth: F.G3 },
-    { root: F.G2, third: F.B3, fifth: F.D3 },
-    { root: F.A2, third: F.C4, fifth: F.E3 },
-    { root: F.F2, third: F.A3, fifth: F.C4 },
+  // --- the right-hand triplet ostinato, four groups to a bar, eight bars ---
+  // each bar (mod 4) is one harmony: i, i/B, VI→II, V — the famous ground
+  const bar0: number[][] = [
+    [N.Gs3, N.Cs4, N.E4], [N.Gs3, N.Cs4, N.E4], [N.Gs3, N.Cs4, N.E4], [N.Gs3, N.Cs4, N.E4],
   ]
-  let bt = 0
-  for (let pass = 0; pass < 3; pass += 1) {
-    progression.forEach((chord) => {
-      const arp = [chord.root, chord.fifth, chord.root * 2, chord.third]
-      arp.forEach((freq, index) => piano(freq, start + (bt + index * 0.5) * beat, beat * 0.85, 0.024))
-      bt += 2
-    })
-  }
-  // resolve on a held C chord
-  ;[F.C3, F.G3, F.C4, F.E4].forEach((freq) => piano(freq, start + 24 * beat, beat * 6, 0.026))
+  const bar2: number[][] = [
+    [N.A3, N.Cs4, N.E4], [N.A3, N.Cs4, N.E4], [N.A3, N.D4, N.Fs4], [N.A3, N.D4, N.Fs4],
+  ]
+  const bar3: number[][] = [
+    [N.Gs3, N.Bs3, N.E4], [N.Gs3, N.Bs3, N.E4], [N.Gs3, N.Cs4, N.E4], [N.Gs3, N.Cs4, N.Ds4],
+  ]
+  const bars = [bar0, bar0, bar2, bar3, bar0, bar0, bar2, bar3]
 
-  // the singing right-hand melody
+  bars.forEach((groups, barIndex) => {
+    groups.forEach((triplet, groupIndex) => {
+      triplet.forEach((frequency, tripletIndex) => {
+        const at = start + (barIndex * 4 + groupIndex) * beat + tripletIndex * tnote
+        piano(frequency, at, beat * 0.95, 0.02)
+      })
+    })
+  })
+
+  // --- the left-hand octave ground: the slow descent C# – B – A/F# – G# ---
+  const bass: Array<[number, number, number]> = [
+    [N.Cs2, 0, 4], [N.B1, 4, 4], [N.A1, 8, 2], [N.Fs1, 10, 2], [N.Gs1, 12, 4],
+    [N.Cs2, 16, 4], [N.B1, 20, 4], [N.A1, 24, 2], [N.Fs1, 26, 2], [N.Gs1, 28, 4],
+  ]
+  bass.forEach(([frequency, b, d]) => {
+    piano(frequency, start + b * beat, d * beat, 0.03)
+    piano(frequency * 2, start + b * beat, d * beat, 0.02)
+  })
+
+  // --- the melody, entering after the four-bar introduction (bar 5) ---
+  // the dotted line that rises once and then keeps sinking, unanswered
   const melody: Array<[number, number, number]> = [
-    [F.E4, 0, 1], [F.G4, 1, 1], [F.C5, 2, 2], [F.B4, 4, 1], [F.A4, 5, 1], [F.G4, 6, 1.5], [F.E4, 7.5, 0.5],
-    [F.F4, 8, 1], [F.A4, 9, 1], [F.G4, 10, 2], [F.E4, 12, 1], [F.F4, 13, 1], [F.E4, 14, 1], [F.C4, 15, 1],
-    [F.E4, 16, 1], [F.G4, 17, 1], [F.C5, 18, 1], [F.D5, 19, 1], [F.E5, 20, 2], [F.C5, 22, 1], [F.G4, 23, 1],
-    [F.C5, 24, 5],
+    [N.Gs4, 16, 1.5], [N.Gs4, 17.5, 0.5], [N.Gs4, 18, 1], [N.A4, 19, 0.5], [N.Gs4, 19.5, 0.5],
+    [N.Gs4, 20, 1], [N.Fs4, 21, 1], [N.E4, 22, 1], [N.Ds4, 23, 1],
+    [N.E4, 24, 1.5], [N.Gs4, 25.5, 0.5], [N.Cs5, 26, 2],
+    [N.B4, 28, 1], [N.A4, 29, 1], [N.Gs4, 30, 2],
   ]
-  melody.forEach(([frequency, b, d]) => piano(frequency, start + b * beat, d * beat, 0.062))
+  melody.forEach(([frequency, b, d]) => piano(frequency, start + b * beat, d * beat, 0.055))
 
-  return 32 * beat * 1000
+  // --- the close: V resolves to a bare C# minor that just fades, never lifting ---
+  const endAt = start + 32 * beat
+  ;[N.Cs2, N.Cs3, N.E3, N.Gs3, N.Cs4].forEach((frequency) =>
+    piano(frequency, endAt, beat * 7, 0.028),
+  )
+
+  return Math.round((39 * beat) * 1000)
 }
 
 // A quick ascending sparkle used when the drive collects a star fragment.

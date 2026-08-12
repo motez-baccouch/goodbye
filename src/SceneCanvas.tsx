@@ -1151,11 +1151,12 @@ function SceneCanvas() {
     setOverlayMode(null)
   }
 
+  // Note: the lighthouse climb deliberately does NOT block controls — the player
+  // needs the joystick (to ascend/descend) and free look active while climbing.
   const controlsBlocked =
     Boolean(overlayMode) ||
     Boolean(memoryReveal) ||
     Boolean(activeMiniGame) ||
-    climb !== 'none' ||
     letterVisible ||
     creditsVisible ||
     (deviceProfile.mobile && !deviceProfile.landscape)
@@ -1430,7 +1431,7 @@ function SceneCanvas() {
       haptic(14)
       setMenuOpen(false)
       setClimb('up')
-      setDetailMessage('Up the spiral stairs…')
+      setDetailMessage('Hold forward to climb the stairs — drag to look around.')
     }
   }
 
@@ -1493,7 +1494,12 @@ function SceneCanvas() {
           inputBlocked={controlsBlocked}
           seat={seat}
           climb={climb}
-          onClimbTop={() => setClimb('top')}
+          onClimbTop={() => {
+            setClimb('top')
+            playTone('lantern')
+            haptic(18)
+          }}
+          onClimbLeaveTop={() => setClimb('up')}
           onClimbBottom={() => {
             setClimb('none')
             setDetailMessage('Back on the ground. The lighthouse keeps watch.')
@@ -1510,6 +1516,7 @@ function SceneCanvas() {
           <GardenModels />
         </Suspense>
         <SkyConstellations />
+        <AuroraBorealis />
         <NouraConstellation visible={secretEnding} />
         <Comet nonce={cometNonce} />
         <ShootingStars />
@@ -1666,11 +1673,17 @@ function SceneCanvas() {
 
       {showFps ? <FpsMeter /> : null}
 
+      {climb === 'up' || climb === 'down' ? (
+        <div className="climb-hint">
+          <p>Hold ▲ to climb · drag to look · hold ▼ to come down</p>
+        </div>
+      ) : null}
+
       {climb === 'top' ? (
         <div className="climb-hud">
           <p className="climb-message">
-            You climbed all that for the view. Worth it — though somewhere down there, the padel
-            ball is still running from you.
+            The aurora over the whole moonlit garden — worth every step. Take it in, look around.
+            (Somewhere down there, that padel ball is still running from you.)
           </p>
           <button type="button" className="interact-button" onClick={() => setClimb('down')}>
             Descend
@@ -1678,7 +1691,7 @@ function SceneCanvas() {
         </div>
       ) : null}
 
-      {!controlsBlocked && gateOpen && !finalOpen ? (
+      {!controlsBlocked && climb === 'none' && gateOpen && !finalOpen ? (
         <div className="compass-hud">
           <svg className="compass-arrow" viewBox="0 0 24 24" style={{ transform: `rotate(${guideAngle}rad)` }} aria-hidden="true">
             <path d="M12 2 L19 20 L12 15 L5 20 Z" fill="#ffe6a1" />
@@ -1707,7 +1720,7 @@ function SceneCanvas() {
           <button
             type="button"
             className="interact-button"
-            disabled={!interactable && !nearbySeat && !seat}
+            disabled={(!interactable && !nearbySeat && !seat) || climb !== 'none'}
             onClick={handleInteract}
           >
             {interactLabel}
@@ -2104,6 +2117,7 @@ function FirstPersonRig({
   seat,
   climb,
   onClimbTop,
+  onClimbLeaveTop,
   onClimbBottom,
   onSample,
 }: {
@@ -2115,6 +2129,7 @@ function FirstPersonRig({
   seat: BenchSeat | null
   climb: 'none' | 'up' | 'top' | 'down'
   onClimbTop: () => void
+  onClimbLeaveTop: () => void
   onClimbBottom: () => void
   onSample: (sample: PlayerSample) => void
 }) {
@@ -2170,37 +2185,65 @@ function FirstPersonRig({
 
   useEffect(() => {
     climbRef.current = climb
+    // starting a fresh climb from the ground: lift a hair off zero so the exit
+    // check doesn't fire instantly, and face out over the moonlit garden
+    if (climb === 'up' && climbTRef.current < 0.03) {
+      climbTRef.current = 0.02
+      const dx = 0 - LIGHTHOUSE_POS[0]
+      const dz = -8 - LIGHTHOUSE_POS[2]
+      yawRef.current = Math.atan2(dx, -dz)
+      pitchRef.current = 0.06
+    }
   }, [climb])
 
   useFrame((_, delta) => {
-    // scripted lighthouse ascent: spiral the camera up the tower and survey
+    // manual lighthouse climb: the player walks up the outer spiral stairs at
+    // their own pace — hold forward to ascend, back to descend — with full free
+    // look the whole way up, so they discover the view themselves.
     const climbNow = climbRef.current
     if (climbNow !== 'none') {
-      const target = climbNow === 'down' ? 0 : 1
-      climbTRef.current = THREE.MathUtils.damp(climbTRef.current, target, 2.4, delta)
+      // free look is always live while climbing (wider pitch to take in sky + garden)
+      yawRef.current += lookRef.current.dx * 0.0032
+      pitchRef.current = clamp(pitchRef.current - lookRef.current.dy * 0.0022, -0.6, 0.6)
+      lookRef.current.dx = 0
+      lookRef.current.dy = 0
+
+      const keyY = (keysRef.current.forward ? 1 : 0) - (keysRef.current.back ? 1 : 0)
+      const climbInput = clamp(movementRef.current.y + keyY, -1, 1)
+
+      if (climbNow === 'down') {
+        // the Descend button: glide smoothly all the way back to the ground
+        climbTRef.current = THREE.MathUtils.damp(climbTRef.current, 0, 2.6, delta)
+      } else {
+        // 'up' / 'top': the player drives their own height (~4s for a full climb)
+        climbTRef.current = clamp(climbTRef.current + climbInput * delta * 0.26, 0, 1)
+      }
+
       const t = climbTRef.current
       const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
       const radius = LIGHTHOUSE_RADIUS + 0.5
       const height = t * LIGHTHOUSE_TOP
       const cx = LIGHTHOUSE_POS[0] + Math.cos(angle) * radius
       const cz = LIGHTHOUSE_POS[2] + Math.sin(angle) * radius
-      camera.position.set(cx, 1.5 + height, cz)
+      // a gentle step-bob only while actively moving up or down the stairs
+      const bob = Math.sin(clock.elapsedTime * 7) * Math.abs(climbInput) * 0.03
 
-      if (climbNow === 'top' && t > 0.96) {
-        // slowly survey the whole moonlit garden spread out far below
-        const survey = clock.elapsedTime * 0.09
-        camera.lookAt(cx + Math.cos(survey) * 12, 1.5 + height - 8.5, cz + Math.sin(survey) * 12)
-      } else {
-        const tangent = angle + (Math.PI / 2) * (climbNow === 'down' ? -1 : 1)
-        camera.lookAt(cx + Math.cos(tangent) * 3, 1.5 + height + (climbNow === 'down' ? -2 : 3), cz + Math.sin(tangent) * 3)
-      }
+      const direction = tmpDirection.set(
+        Math.sin(yawRef.current) * Math.cos(pitchRef.current),
+        Math.sin(pitchRef.current),
+        -Math.cos(yawRef.current) * Math.cos(pitchRef.current),
+      )
+      camera.position.set(cx, 1.5 + height + bob, cz)
+      camera.lookAt(tmpLookTarget.copy(camera.position).add(direction))
 
-      if (climbNow === 'up' && t > 0.985) {
-        onClimbTop()
-      }
-      if (climbNow === 'down' && t < 0.015) {
+      if (t <= 0.004 && (climbNow === 'down' || climbInput < 0)) {
+        // stepped back down to the ground: hand control back on the base landing
+        positionRef.current.set(LIGHTHOUSE_POS[0] + 2.9, 1.55, LIGHTHOUSE_POS[2] + 2.9)
         onClimbBottom()
+        return
       }
+      if (climbNow === 'up' && t >= 0.985) onClimbTop()
+      else if (climbNow === 'top' && t < 0.9) onClimbLeaveTop()
       return
     }
 
@@ -3202,8 +3245,113 @@ function NouraConstellation({ visible }: { visible: boolean }) {
   )
 }
 
+// Aurora borealis: flowing curtains of light across the northern sky. Each
+// curtain is a big plane with a hand-written shader — value-noise ray streaks
+// that drift and shimmer, green at the base rising to teal and violet tips.
+// Raw ShaderMaterial, so scene fog never touches it: it stays visible from the
+// ground and, especially, from the top of the lighthouse.
+const AURORA_VERT = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+
+const AURORA_FRAG = `
+  precision mediump float;
+  uniform float uTime;
+  uniform float uSeed;
+  varying vec2 vUv;
+
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+  float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    float a = hash(i), b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }
+  float fbm(vec2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 3; i++) { v += a * noise(p); p *= 2.0; a *= 0.5; }
+    return v;
+  }
+
+  void main() {
+    vec2 uv = vUv;
+    float t = uTime * 0.06 + uSeed;
+    // the whole sheet drifts slowly sideways
+    float drift = fbm(vec2(uv.x * 3.0 + t, uSeed)) * 0.35;
+    float x = uv.x + drift * 0.15;
+    // vertical ray streaks that flicker over time
+    float rays = fbm(vec2(x * 22.0, t * 1.5 + uSeed * 3.0));
+    rays = pow(rays, 1.6);
+    rays *= smoothstep(0.02, 0.28, rays);
+    // bright near the base, fading up; soft edges left/right
+    float vert = smoothstep(0.0, 0.12, uv.y) * (1.0 - smoothstep(0.35, 1.0, uv.y));
+    float edge = smoothstep(0.0, 0.08, uv.x) * (1.0 - smoothstep(0.92, 1.0, uv.x));
+    float shimmer = 0.7 + 0.3 * sin(uv.x * 10.0 + uTime * 1.2 + uSeed);
+    float intensity = vert * rays * edge * shimmer;
+    // green low -> teal mid -> violet tips
+    vec3 col = mix(vec3(0.15, 0.95, 0.45), vec3(0.15, 0.7, 0.85), smoothstep(0.0, 0.5, uv.y));
+    col = mix(col, vec3(0.55, 0.25, 0.9), smoothstep(0.45, 1.0, uv.y));
+    gl_FragColor = vec4(col * intensity * 1.4, clamp(intensity, 0.0, 1.0) * 0.55);
+  }
+`
+
+function AuroraCurtain({
+  position,
+  rotation,
+  seed,
+  width,
+}: {
+  position: Vec3
+  rotation: Vec3
+  seed: number
+  width: number
+}) {
+  const materialRef = useRef<THREE.ShaderMaterial>(null)
+  const uniforms = useMemo(
+    () => ({ uTime: { value: 0 }, uSeed: { value: seed } }),
+    [seed],
+  )
+
+  useFrame(({ clock }) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.uTime.value = clock.elapsedTime
+    }
+  })
+
+  return (
+    <mesh position={position} rotation={rotation} frustumCulled={false}>
+      <planeGeometry args={[width, 46, 1, 1]} />
+      <shaderMaterial
+        ref={materialRef}
+        transparent
+        depthWrite={false}
+        side={THREE.DoubleSide}
+        blending={THREE.AdditiveBlending}
+        uniforms={uniforms}
+        vertexShader={AURORA_VERT}
+        fragmentShader={AURORA_FRAG}
+      />
+    </mesh>
+  )
+}
+
+function AuroraBorealis() {
+  return (
+    <group>
+      <AuroraCurtain position={[-8, 26, -72]} rotation={[0.1, 0.14, 0.03]} seed={0.4} width={120} />
+      <AuroraCurtain position={[16, 30, -82]} rotation={[0.14, -0.2, -0.05]} seed={2.3} width={140} />
+    </group>
+  )
+}
+
 // The giant lighthouse: a spiral staircase winds up a tall tower to a lantern
-// room with a slowly-sweeping beam. Climbing it is a scripted camera ascent.
+// room with a slowly-sweeping beam. The player climbs it themselves — hold
+// forward to walk up the outer stairs, back to come down, free look throughout.
 const LIGHTHOUSE_POS: Vec3 = [-18, 0, -16]
 const LIGHTHOUSE_TOP = 16.5
 const LIGHTHOUSE_TURNS = 2.75

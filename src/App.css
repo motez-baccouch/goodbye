@@ -2031,6 +2031,30 @@
   animation: captionFade 1.2s ease both;
 }
 
+.climb-hint {
+  position: absolute;
+  left: 50%;
+  top: max(1rem, calc(env(safe-area-inset-top, 0) + 0.6rem));
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  background: rgba(10, 14, 26, 0.55);
+  border: 1px solid rgba(255, 236, 179, 0.28);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  animation: captionFade 0.8s ease both;
+}
+
+.climb-hint p {
+  margin: 0;
+  font-size: clamp(0.72rem, 2.4vw, 0.9rem);
+  letter-spacing: 0.02em;
+  color: #ffe6a1;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+
 .orientation-overlay {
   z-index: 30;
 }
