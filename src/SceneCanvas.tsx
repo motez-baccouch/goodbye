@@ -1735,7 +1735,7 @@ function SceneCanvas() {
 
       {climb === 'up' || climb === 'down' ? (
         <div className="climb-hint">
-          <p>Hold ▲ to climb · drag to look · hold ▼ to come down</p>
+          <p>Hold ▲ to climb the stairs · hold ▼ to come back down</p>
         </div>
       ) : null}
 
@@ -2304,13 +2304,12 @@ function FirstPersonRig({
   useEffect(() => {
     climbRef.current = climb
     // starting a fresh climb from the ground: lift a hair off zero so the exit
-    // check doesn't fire instantly, and face out over the moonlit garden
+    // check doesn't fire instantly, and face UP the stairs so forward = climb
     if (climb === 'up' && climbTRef.current < 0.03) {
       climbTRef.current = 0.02
-      const dx = 0 - LIGHTHOUSE_POS[0]
-      const dz = -8 - LIGHTHOUSE_POS[2]
-      yawRef.current = Math.atan2(dx, -dz)
-      pitchRef.current = 0.06
+      const startAngle = 0.02 * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
+      yawRef.current = startAngle + Math.PI
+      pitchRef.current = 0.0
     }
   }, [climb])
 
@@ -2320,33 +2319,47 @@ function FirstPersonRig({
     // look the whole way up, so they discover the view themselves.
     const climbNow = climbRef.current
     if (climbNow !== 'none') {
-      // free look is always live while climbing (wider pitch to take in sky + garden)
-      yawRef.current += lookRef.current.dx * 0.0032
-      pitchRef.current = clamp(pitchRef.current - lookRef.current.dy * 0.0022, -0.6, 0.6)
-      lookRef.current.dx = 0
-      lookRef.current.dy = 0
-
+      // manual climb: hold forward to walk UP the outer stairs, back to descend.
+      // The camera steers itself up the spiral (forward always = upward), then
+      // eases onto the gallery walkway at the very top for the view.
       const scoping = climbNow === 'top' && scopeRef.current
       const keyY = (keysRef.current.forward ? 1 : 0) - (keysRef.current.back ? 1 : 0)
-      // freeze the player in place while looking through the telescope
       const climbInput = scoping ? 0 : clamp(movementRef.current.y + keyY, -1, 1)
 
       if (climbNow === 'down') {
-        // the Descend button: glide smoothly all the way back to the ground
         climbTRef.current = THREE.MathUtils.damp(climbTRef.current, 0, 2.6, delta)
       } else {
-        // 'up' / 'top': the player drives their own height (~4s for a full climb)
-        climbTRef.current = clamp(climbTRef.current + climbInput * delta * 0.26, 0, 1)
+        climbTRef.current = clamp(climbTRef.current + climbInput * delta * 0.2, 0, 1)
       }
 
       const t = climbTRef.current
       const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
-      const radius = LIGHTHOUSE_STAIR_RADIUS
+      const gallery = clamp((t - 0.9) / 0.1, 0, 1)
+
+      // look: vertical drag always tilts; horizontal free-look only once you're
+      // up on the gallery (during the climb the camera follows the stairs)
+      pitchRef.current = clamp(pitchRef.current - lookRef.current.dy * 0.0022, -0.6, 0.6)
+      if (gallery > 0.5) {
+        yawRef.current += lookRef.current.dx * 0.0032
+      }
+      lookRef.current.dx = 0
+      lookRef.current.dy = 0
+
+      if (gallery < 0.5) {
+        // gently steer to face up the spiral so "forward" reads as climbing
+        const tangentYaw = angle + Math.PI
+        let dyaw = tangentYaw - yawRef.current
+        dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw))
+        yawRef.current += dyaw * Math.min(1, delta * 4)
+      }
+
       const height = t * LIGHTHOUSE_TOP
-      const cx = LIGHTHOUSE_POS[0] + Math.cos(angle) * radius
-      const cz = LIGHTHOUSE_POS[2] + Math.sin(angle) * radius
-      // a gentle step-bob only while actively moving up or down the stairs
-      const bob = Math.sin(clock.elapsedTime * 7) * Math.abs(climbInput) * 0.03
+      // ease inward onto the gallery walkway (radius 1.85) at the very top
+      const camRadius = THREE.MathUtils.lerp(LIGHTHOUSE_STAIR_RADIUS, 1.85, gallery)
+      const cx = LIGHTHOUSE_POS[0] + Math.cos(angle) * camRadius
+      const cz = LIGHTHOUSE_POS[2] + Math.sin(angle) * camRadius
+      const eyeY = THREE.MathUtils.lerp(1.5 + height, LIGHTHOUSE_TOP + 2.0, gallery)
+      const bob = Math.sin(clock.elapsedTime * 7) * Math.abs(climbInput) * 0.03 * (1 - gallery)
 
       const persp = perspRef.current
       if (scoping) {
@@ -2355,7 +2368,7 @@ function FirstPersonRig({
           persp.fov = THREE.MathUtils.damp(persp.fov, 26, 3.5, delta)
           persp.updateProjectionMatrix()
         }
-        camera.position.set(cx, 1.5 + height, cz)
+        camera.position.set(cx, eyeY, cz)
         camera.lookAt(-15, 7, -66)
       } else {
         if (persp && Math.abs(persp.fov - fovBaseRef.current) > 0.05) {
@@ -2367,7 +2380,7 @@ function FirstPersonRig({
           Math.sin(pitchRef.current),
           -Math.cos(yawRef.current) * Math.cos(pitchRef.current),
         )
-        camera.position.set(cx, 1.5 + height + bob, cz)
+        camera.position.set(cx, eyeY + bob, cz)
         camera.lookAt(tmpLookTarget.copy(camera.position).add(direction))
       }
 
@@ -3956,7 +3969,7 @@ function CafeCart({ highlighted }: { highlighted: boolean }) {
 // forward to walk up the outer stairs, back to come down, free look throughout.
 const LIGHTHOUSE_POS: Vec3 = [-18, 0, -16]
 const LIGHTHOUSE_TOP = 16.5
-const LIGHTHOUSE_TURNS = 2.75
+const LIGHTHOUSE_TURNS = 2.0
 // the outer staircase (and the climbing camera) wrap the tower at this radius —
 // safely OUTSIDE the tower wall at every height so you never see through it
 const LIGHTHOUSE_STAIR_RADIUS = 3.05
@@ -3970,7 +3983,7 @@ function Lighthouse() {
     }
   })
 
-  const stepCount = 70
+  const stepCount = 96
 
   return (
     <group position={LIGHTHOUSE_POS}>
@@ -3991,41 +4004,36 @@ function Lighthouse() {
           <meshStandardMaterial color="#c58a86" roughness={0.7} />
         </mesh>
       ))}
-      {/* a proper external spiral staircase wrapping the tower: wedge steps +
-          posts + a helical handrail, all at the outer stair radius */}
+      {/* clean external spiral staircase: overlapping radial treads that form a
+          continuous ramp, an outer parapet wall and a handrail cap. Local axes
+          after the y-rotation: +x is radial (outward), +z is tangential. */}
       {Array.from({ length: stepCount }).map((_, index) => {
         const t = index / stepCount
         const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
-        const height = t * LIGHTHOUSE_TOP + 0.55
+        const height = t * LIGHTHOUSE_TOP + 0.5
         const cx = Math.cos(angle) * LIGHTHOUSE_STAIR_RADIUS
         const cz = Math.sin(angle) * LIGHTHOUSE_STAIR_RADIUS
-        const railTop = height + 0.95
         return (
-          <group key={index}>
-            {/* the tread */}
-            <mesh position={[cx, height, cz]} rotation={[0, -angle, 0]}>
-              <boxGeometry args={[1.4, 0.14, 0.62]} />
-              <meshStandardMaterial color="#b8adc6" roughness={0.7} />
+          <group key={index} position={[cx, height, cz]} rotation={[0, -angle, 0]}>
+            {/* tread (radial plank), wide enough tangentially to abut the next */}
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[1.5, 0.12, 0.62]} />
+              <meshStandardMaterial color="#b8adc6" roughness={0.75} />
             </mesh>
-            {/* a support strut down to imply the stringer */}
-            <mesh position={[cx * 0.93, height - 0.4, cz * 0.93]}>
-              <boxGeometry args={[0.1, 0.8, 0.1]} />
-              <meshStandardMaterial color="#7d7390" roughness={0.8} />
+            {/* riser under the outer front edge so the ramp reads solid */}
+            <mesh position={[0, -0.16, 0]}>
+              <boxGeometry args={[1.5, 0.3, 0.5]} />
+              <meshStandardMaterial color="#8f85a3" roughness={0.85} />
             </mesh>
-            {/* outer railing post every couple of steps */}
-            {index % 2 === 0 ? (
-              <mesh position={[Math.cos(angle) * (LIGHTHOUSE_STAIR_RADIUS + 0.42), height + 0.48, Math.sin(angle) * (LIGHTHOUSE_STAIR_RADIUS + 0.42)]}>
-                <boxGeometry args={[0.06, 0.95, 0.06]} />
-                <meshStandardMaterial color="#6f6684" roughness={0.8} />
-              </mesh>
-            ) : null}
-            {/* helical handrail segment linking this step's rail height to the next */}
-            <mesh
-              position={[Math.cos(angle) * (LIGHTHOUSE_STAIR_RADIUS + 0.42), railTop, Math.sin(angle) * (LIGHTHOUSE_STAIR_RADIUS + 0.42)]}
-              rotation={[0, -angle, 0.16]}
-            >
-              <boxGeometry args={[1.5, 0.07, 0.07]} />
-              <meshStandardMaterial color="#8a7fa0" roughness={0.7} />
+            {/* outer parapet wall — panels overlap into a continuous spiral rail */}
+            <mesh position={[0.72, 0.42, 0]}>
+              <boxGeometry args={[0.1, 0.72, 0.66]} />
+              <meshStandardMaterial color="#9a90ae" roughness={0.75} />
+            </mesh>
+            {/* handrail cap */}
+            <mesh position={[0.72, 0.82, 0]}>
+              <boxGeometry args={[0.22, 0.1, 0.66]} />
+              <meshStandardMaterial color="#6f6684" roughness={0.7} />
             </mesh>
           </group>
         )
@@ -4072,9 +4080,9 @@ function EiffelIron() {
   return <meshStandardMaterial color="#7a6446" roughness={0.65} emissive="#3a2c18" emissiveIntensity={0.35} flatShading />
 }
 
-// A stylised low-poly Eiffel tower with the iconic lattice look: four curved
-// legs, arched base, X cross-bracing, three platforms and a golden night glow.
-// Stands on the far horizon — a nod to "break a leg in France."
+// A clean low-poly Eiffel tower: four curved splayed legs, the iconic base
+// arches, three platforms and a smooth tapering square-lattice shaft (faceted
+// frustums, no noisy braces). Golden night glow. Far horizon, "break a leg."
 function EiffelTower({ position, scale = 1 }: { position: Vec3; scale?: number }) {
   const corners: Array<[number, number]> = [
     [1, 1],
@@ -4082,102 +4090,71 @@ function EiffelTower({ position, scale = 1 }: { position: Vec3; scale?: number }
     [-1, 1],
     [-1, -1],
   ]
-  // the four faces of the tower, each spanned by a pair of corner legs
   const faces: Array<{ pos: [number, number]; rot: number }> = [
-    { pos: [0, 0.86], rot: 0 },
-    { pos: [0, -0.86], rot: Math.PI },
-    { pos: [0.86, 0], rot: Math.PI / 2 },
-    { pos: [-0.86, 0], rot: -Math.PI / 2 },
+    { pos: [0, 0.9], rot: 0 },
+    { pos: [0, -0.9], rot: Math.PI },
+    { pos: [0.9, 0], rot: Math.PI / 2 },
+    { pos: [-0.9, 0], rot: -Math.PI / 2 },
   ]
 
   return (
     <group position={position} scale={scale}>
-      {/* four splayed legs — a lower and upper segment give the classic curve */}
+      {/* four curved splayed legs (lower + upper segment) */}
       {corners.map(([sx, sz], index) => (
         <group key={index}>
-          <mesh position={[sx * 0.86, 0.95, sz * 0.86]} rotation={[sz * 0.2, 0, -sx * 0.2]}>
-            <cylinderGeometry args={[0.14, 0.22, 2.1, 4]} />
+          <mesh position={[sx * 0.92, 0.95, sz * 0.92]} rotation={[sz * 0.24, 0, -sx * 0.24]}>
+            <cylinderGeometry args={[0.16, 0.28, 2.3, 4]} />
             <EiffelIron />
           </mesh>
-          <mesh position={[sx * 0.56, 2.85, sz * 0.56]} rotation={[sz * 0.1, 0, -sx * 0.1]}>
-            <cylinderGeometry args={[0.1, 0.14, 1.9, 4]} />
+          <mesh position={[sx * 0.58, 2.95, sz * 0.58]} rotation={[sz * 0.1, 0, -sx * 0.1]}>
+            <cylinderGeometry args={[0.12, 0.17, 2.0, 4]} />
             <EiffelIron />
           </mesh>
         </group>
       ))}
-      {/* iconic arch + X cross-bracing on each of the four faces */}
+      {/* iconic base arch on each of the four faces */}
       {faces.map((face, index) => (
-        <group key={`face-${index}`} position={[face.pos[0], 0, face.pos[1]]} rotation={[0, face.rot, 0]}>
-          <mesh position={[0, 1.35, 0]}>
-            <torusGeometry args={[0.72, 0.05, 6, 16, Math.PI]} />
-            <EiffelIron />
-          </mesh>
-          <mesh position={[0, 1.0, 0]} rotation={[0, 0, 0.7]}>
-            <boxGeometry args={[2.0, 0.05, 0.05]} />
-            <EiffelIron />
-          </mesh>
-          <mesh position={[0, 1.0, 0]} rotation={[0, 0, -0.7]}>
-            <boxGeometry args={[2.0, 0.05, 0.05]} />
-            <EiffelIron />
-          </mesh>
-          <mesh position={[0, 2.9, 0]} rotation={[0, 0, 0.75]}>
-            <boxGeometry args={[1.35, 0.04, 0.04]} />
-            <EiffelIron />
-          </mesh>
-          <mesh position={[0, 2.9, 0]} rotation={[0, 0, -0.75]}>
-            <boxGeometry args={[1.35, 0.04, 0.04]} />
-            <EiffelIron />
-          </mesh>
-        </group>
+        <mesh key={`arch-${index}`} position={[face.pos[0], 1.55, face.pos[1]]} rotation={[0, face.rot, 0]}>
+          <torusGeometry args={[0.82, 0.08, 8, 20, Math.PI]} />
+          <EiffelIron />
+        </mesh>
       ))}
       {/* first platform */}
-      <mesh position={[0, 3.9, 0]}>
-        <boxGeometry args={[1.75, 0.2, 1.75]} />
+      <mesh position={[0, 3.95, 0]}>
+        <boxGeometry args={[1.85, 0.22, 1.85]} />
         <EiffelIron />
       </mesh>
-      {/* tapered mid section with X-braces */}
-      <mesh position={[0, 5.6, 0]}>
-        <cylinderGeometry args={[0.28, 0.55, 3.2, 4]} />
+      {/* lower shaft — clean tapering faceted square frustum */}
+      <mesh position={[0, 5.75, 0]}>
+        <cylinderGeometry args={[0.5, 0.82, 3.5, 4]} />
         <EiffelIron />
       </mesh>
-      {faces.map((face, index) => (
-        <group key={`mid-${index}`} position={[face.pos[0] * 0.5, 5.6, face.pos[1] * 0.5]} rotation={[0, face.rot, 0]}>
-          <mesh rotation={[0, 0, 0.8]}>
-            <boxGeometry args={[1.5, 0.04, 0.04]} />
-            <EiffelIron />
-          </mesh>
-          <mesh rotation={[0, 0, -0.8]}>
-            <boxGeometry args={[1.5, 0.04, 0.04]} />
-            <EiffelIron />
-          </mesh>
-        </group>
-      ))}
       {/* second platform */}
-      <mesh position={[0, 7.3, 0]}>
-        <boxGeometry args={[0.92, 0.16, 0.92]} />
+      <mesh position={[0, 7.6, 0]}>
+        <boxGeometry args={[1.02, 0.18, 1.02]} />
         <EiffelIron />
       </mesh>
-      {/* upper taper */}
-      <mesh position={[0, 9.0, 0]}>
-        <cylinderGeometry args={[0.09, 0.28, 3.4, 4]} />
+      {/* upper shaft */}
+      <mesh position={[0, 9.5, 0]}>
+        <cylinderGeometry args={[0.16, 0.44, 3.7, 4]} />
         <EiffelIron />
       </mesh>
-      {/* third (top) platform */}
-      <mesh position={[0, 10.7, 0]}>
-        <boxGeometry args={[0.34, 0.12, 0.34]} />
+      {/* top platform */}
+      <mesh position={[0, 11.35, 0]}>
+        <boxGeometry args={[0.42, 0.13, 0.42]} />
         <EiffelIron />
       </mesh>
       {/* spire */}
-      <mesh position={[0, 11.6, 0]}>
-        <cylinderGeometry args={[0.02, 0.08, 1.6, 6]} />
+      <mesh position={[0, 12.25, 0]}>
+        <cylinderGeometry args={[0.03, 0.12, 1.7, 6]} />
         <EiffelIron />
       </mesh>
       {/* beacon at the very top */}
-      <mesh position={[0, 12.5, 0]}>
-        <sphereGeometry args={[0.11, 10, 10]} />
+      <mesh position={[0, 13.25, 0]}>
+        <sphereGeometry args={[0.12, 10, 10]} />
         <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={2.2} toneMapped={false} fog={false} />
       </mesh>
-      <LampGlow position={[0, 12.5, 0]} scale={2.6} color="#ffe9a8" opacity={0.6} />
+      <LampGlow position={[0, 13.25, 0]} scale={2.8} color="#ffe9a8" opacity={0.6} />
     </group>
   )
 }
