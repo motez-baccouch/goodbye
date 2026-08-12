@@ -5,9 +5,19 @@ import * as THREE from 'three'
 import { haptic, playFootstep, playMelody, playTone, unlockAudio } from './audioEngine'
 import { isMusicMuted, notifyFinale, setMusicDucked, setMusicMuted, startMusic } from './ambientMusic'
 import { chapters, finalLetter } from './experienceData'
-import { SparkBurst, StationMiniGame } from './MiniGames'
+import { OptionalGame, SparkBurst, StationMiniGame } from './MiniGames'
 
-type StationId = 'gate' | 'archive' | 'lanterns' | 'path' | 'reading' | 'final' | 'piano' | 'lighthouse'
+type StationId =
+  | 'gate'
+  | 'archive'
+  | 'lanterns'
+  | 'path'
+  | 'reading'
+  | 'final'
+  | 'piano'
+  | 'lighthouse'
+  | 'petanque'
+  | 'cafe'
 type SecretId = 'moon' | 'teddy' | 'padel' | 'book' | 'maze' | 'boss' | 'france' | 'cart'
 
 const TOTAL_SECRETS = 8
@@ -53,6 +63,8 @@ const stationPositions: Record<StationId, Vec3> = {
   final: [0, 0, -42],
   piano: [-5, 0, -0.5],
   lighthouse: [-18, 0, -16],
+  petanque: [-24, 0, -7],
+  cafe: [24, 0, -6],
 }
 
 // fixed-position secrets the guiding arrow can point to once the memories are done
@@ -124,9 +136,10 @@ const mazeWalls: WallBox[] = [
 ]
 
 // hedge rows either side of the moon gate so the garden has a clear front wall
+// (wide enough to seal the whole enlarged front, leaving only the central gate)
 const gateHedgeWalls: WallBox[] = [
-  { x: -12, z: 6, w: 18.6, d: 1.4 },
-  { x: 12, z: 6, w: 18.6, d: 1.4 },
+  { x: -16.5, z: 6, w: 27.6, d: 1.4 },
+  { x: 16.5, z: 6, w: 27.6, d: 1.4 },
 ]
 
 const collisionWalls: WallBox[] = [...mazeWalls, ...gateHedgeWalls]
@@ -601,6 +614,8 @@ function getNearbyInteractable(player: PlayerSample, gateOpen: boolean): Interac
     { id: 'final', radius: 3.6 },
     { id: 'piano', radius: 3 },
     { id: 'lighthouse', radius: 4 },
+    { id: 'petanque', radius: 3.4 },
+    { id: 'cafe', radius: 3.4 },
   ]
 
   let nearest: Interactable | null = null
@@ -679,6 +694,10 @@ function getInteractLabel(
       return 'Play a Melody'
     case 'lighthouse':
       return 'Climb the Lighthouse'
+    case 'petanque':
+      return 'Play Pétanque'
+    case 'cafe':
+      return 'Catch Pastries'
     default:
       return 'Interact'
   }
@@ -787,6 +806,7 @@ function SceneCanvas() {
   const [tapNonce, setTapNonce] = useState(0)
   const [memoryReveal, setMemoryReveal] = useState<MemoryReveal | null>(null)
   const [activeMiniGame, setActiveMiniGame] = useState<'archive' | 'lanterns' | 'path' | 'reading' | null>(null)
+  const [optionalGame, setOptionalGame] = useState<'petanque' | 'cafe' | null>(null)
   const [archiveOpened, setArchiveOpened] = useState([false, false, false, false])
   const [lanternsLit, setLanternsLit] = useState([false, false, false])
   const [pathCollected, setPathCollected] = useState([false, false, false, false])
@@ -1176,6 +1196,7 @@ function SceneCanvas() {
     Boolean(overlayMode) ||
     Boolean(memoryReveal) ||
     Boolean(activeMiniGame) ||
+    Boolean(optionalGame) ||
     letterVisible ||
     creditsVisible ||
     (deviceProfile.mobile && !deviceProfile.landscape)
@@ -1445,6 +1466,14 @@ function SceneCanvas() {
       return
     }
 
+    if (interactable.id === 'petanque' || interactable.id === 'cafe') {
+      playTone('arcade')
+      haptic(12)
+      setMenuOpen(false)
+      setOptionalGame(interactable.id)
+      return
+    }
+
     if (interactable.id === 'lighthouse') {
       playTone('door')
       haptic(14)
@@ -1473,7 +1502,7 @@ function SceneCanvas() {
         }}
       >
         <color attach="background" args={[epilogue ? '#160e22' : '#060915']} />
-        <fog attach="fog" args={[epilogue ? '#1d1226' : '#09101d', 14, 64]} />
+        <fog attach="fog" args={[epilogue ? '#1d1226' : '#09101d', 16, 82]} />
         <ambientLight intensity={epilogue ? 1.65 : 1.5} color={epilogue ? '#ffe7d2' : '#ffffff'} />
         <directionalLight
           position={[7, 14, -14]}
@@ -1541,6 +1570,7 @@ function SceneCanvas() {
         </Suspense>
         <SkyConstellations />
         <AuroraBorealis />
+        <OuterGardens mobile={deviceProfile.mobile} />
         <Petals count={deviceProfile.mobile ? 55 : 110} />
         <MoonPond />
         <BannerPlane />
@@ -1552,6 +1582,8 @@ function SceneCanvas() {
         <FranceConstellation visible={finalOpen} />
         <EiffelTower position={[-15.5, 0, -64]} scale={1.35} />
         <Lighthouse />
+        <PetanqueCourt highlighted={interactable?.id === 'petanque'} />
+        <CafeCart highlighted={interactable?.id === 'cafe'} />
         <SecretHitbox secret="boss" position={[0, 1.9, -46]} radius={1.9} />
         <SecretHitbox secret="cart" position={[6.8, 0.7, 3.2]} radius={1.1} />
         <SecretMarker position={[-12.2, 1.15, -3.9]} found={secretsFound.includes('teddy')} />
@@ -1815,6 +1847,8 @@ function SceneCanvas() {
                   },
                   { name: 'The Piano', where: 'By the tea garden · sit and play a melody', done: false },
                   { name: 'The Lighthouse', where: 'Far west corridor · climb it for the view', done: false },
+                  { name: 'La Pétanque', where: 'Far west lawn · a French boules game', done: false },
+                  { name: 'Le Petit Café', where: 'Far east lawn · catch the pastries', done: false },
                 ].map((place) => {
                   const isNext = place.name === guideTarget.label || `the ${place.name}` === guideTarget.label
                   return (
@@ -2003,6 +2037,16 @@ function SceneCanvas() {
             if (label) {
               setDetailMessage('Back in the garden. Follow the glowing envelopes to what is left.')
             }
+          }}
+        />
+      ) : null}
+
+      {optionalGame ? (
+        <OptionalGame
+          game={optionalGame}
+          onClose={() => {
+            setOptionalGame(null)
+            playTone('focus')
           }}
         />
       ) : null}
@@ -2390,8 +2434,8 @@ function FirstPersonRig({
       }
     }
 
-    positionRef.current.x = clamp(positionRef.current.x, -20.5, 20.5)
-    positionRef.current.z = clamp(positionRef.current.z, -50.5, 10.5)
+    positionRef.current.x = clamp(positionRef.current.x, -30.5, 30.5)
+    positionRef.current.z = clamp(positionRef.current.z, -62.5, 10.5)
 
     if (!gateOpen && positionRef.current.z < 7 && Math.abs(positionRef.current.x) < 2.6) {
       positionRef.current.z = 7
@@ -2404,6 +2448,7 @@ function FirstPersonRig({
       { x: -5, z: -0.5, radius: 1.1 },
       { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 2.6 },
       { x: POND_POS[0], z: POND_POS[2], radius: POND_RADIUS + 0.4 },
+      { x: stationPositions.cafe[0], z: stationPositions.cafe[2], radius: 1.0 },
     ]
 
     colliders.forEach((collider) => {
@@ -2546,8 +2591,8 @@ function GroundPlane() {
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -20]} receiveShadow>
-        <planeGeometry args={[44, 64]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -24]} receiveShadow>
+        <planeGeometry args={[68, 92]} />
         {/* base ground pushed back in depth so every decal above it wins cleanly */}
         <meshStandardMaterial
           color="#dbe3d4"
@@ -2572,8 +2617,8 @@ function GroundFallback() {
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -20]} receiveShadow>
-        <planeGeometry args={[44, 64]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -24]} receiveShadow>
+        <planeGeometry args={[68, 92]} />
         <meshStandardMaterial
           color="#dbe3d4"
           map={grassTexture}
@@ -3693,6 +3738,206 @@ function BannerPlane() {
         <meshBasicMaterial map={bannerTex} transparent side={THREE.DoubleSide} />
       </mesh>
       <pointLight position={[0, 0, 0]} intensity={3} distance={9} color="#ffe9c0" />
+    </group>
+  )
+}
+
+// The wider world beyond the garden: a Provence-style ring of cypress trees, a
+// lavender field on the far west lawn, and a tiny French village silhouetted on
+// the northern horizon with warm-lit windows. All procedural, all cheap.
+const CYPRESS_SPOTS: Array<[number, number]> = [
+  [-28, 2], [-28, -12], [-28, -28], [-28, -44], [-28, -58],
+  [28, 2], [28, -12], [28, -28], [28, -44], [28, -58],
+  [-20, -63], [-8, -64], [8, -64], [20, -63],
+  [-25, 8], [25, 8],
+]
+
+function Cypress({ position, tall }: { position: [number, number]; tall: number }) {
+  return (
+    <group position={[position[0], 0, position[1]]}>
+      <mesh position={[0, 0.4, 0]}>
+        <cylinderGeometry args={[0.18, 0.26, 0.8, 6]} />
+        <meshStandardMaterial color="#3b2a1c" roughness={1} />
+      </mesh>
+      <mesh position={[0, tall * 0.45 + 0.7, 0]}>
+        <coneGeometry args={[0.95, tall, 7]} />
+        <meshStandardMaterial color="#20402a" roughness={1} />
+      </mesh>
+      <mesh position={[0, tall * 0.78 + 0.7, 0]}>
+        <coneGeometry args={[0.6, tall * 0.5, 7]} />
+        <meshStandardMaterial color="#274a31" roughness={1} />
+      </mesh>
+    </group>
+  )
+}
+
+function Cottage({ x, z, color, rotation }: { x: number; z: number; color: string; rotation: number }) {
+  return (
+    <group position={[x, 0, z]} rotation={[0, rotation, 0]}>
+      <mesh position={[0, 1, 0]}>
+        <boxGeometry args={[2.6, 2, 2.1]} />
+        <meshStandardMaterial color={color} roughness={1} />
+      </mesh>
+      <mesh position={[0, 2.55, 0]} rotation={[0, Math.PI / 4, 0]}>
+        <coneGeometry args={[2.05, 1.5, 4]} />
+        <meshStandardMaterial color="#6b3b2e" roughness={1} />
+      </mesh>
+      <mesh position={[0, 0.95, 1.06]}>
+        <planeGeometry args={[0.5, 0.6]} />
+        <meshStandardMaterial color="#ffd98a" emissive="#ffcf6e" emissiveIntensity={1.5} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.8, 0.95, 1.06]}>
+        <planeGeometry args={[0.4, 0.5]} />
+        <meshStandardMaterial color="#ffd98a" emissive="#ffcf6e" emissiveIntensity={1.2} toneMapped={false} />
+      </mesh>
+    </group>
+  )
+}
+
+function Village() {
+  return (
+    <group>
+      <Cottage x={-11} z={-66} color="#b7a98f" rotation={0.2} />
+      <Cottage x={-4.5} z={-67.5} color="#c8b89a" rotation={-0.15} />
+      <Cottage x={4} z={-66.5} color="#b09a80" rotation={0.1} />
+      <Cottage x={11.5} z={-67.5} color="#c2b394" rotation={-0.22} />
+      {/* a little village church with a steeple */}
+      <group position={[18, 0, -66]} rotation={[0, -0.2, 0]}>
+        <mesh position={[0, 1.2, 0]}>
+          <boxGeometry args={[2.2, 2.4, 2.6]} />
+          <meshStandardMaterial color="#c9bda2" roughness={1} />
+        </mesh>
+        <mesh position={[0, 3.1, 0]} rotation={[0, Math.PI / 4, 0]}>
+          <coneGeometry args={[1.8, 1.3, 4]} />
+          <meshStandardMaterial color="#5b3a30" roughness={1} />
+        </mesh>
+        <mesh position={[0, 3.4, 1.0]}>
+          <boxGeometry args={[0.7, 1.6, 0.7]} />
+          <meshStandardMaterial color="#c9bda2" roughness={1} />
+        </mesh>
+        <mesh position={[0, 4.6, 1.0]}>
+          <coneGeometry args={[0.6, 1.3, 4]} />
+          <meshStandardMaterial color="#5b3a30" roughness={1} />
+        </mesh>
+        <mesh position={[0, 1.1, 1.31]}>
+          <planeGeometry args={[0.5, 0.9]} />
+          <meshStandardMaterial color="#ffd98a" emissive="#ffcf6e" emissiveIntensity={1.4} toneMapped={false} />
+        </mesh>
+      </group>
+      <pointLight position={[2, 3, -66]} intensity={9} distance={40} color="#ffcf8a" />
+    </group>
+  )
+}
+
+function LavenderField({ count }: { count: number }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null)
+  const dummy = useMemo(() => new THREE.Object3D(), [])
+
+  useEffect(() => {
+    const mesh = meshRef.current
+    if (!mesh) {
+      return
+    }
+    for (let i = 0; i < count; i += 1) {
+      dummy.position.set(-25 + Math.random() * 12, 0.55, -44 - Math.random() * 14)
+      dummy.rotation.set(0, Math.random() * Math.PI, (Math.random() - 0.5) * 0.2)
+      dummy.scale.setScalar(0.7 + Math.random() * 0.6)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    }
+    mesh.instanceMatrix.needsUpdate = true
+  }, [count, dummy])
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
+      <coneGeometry args={[0.14, 1.1, 5]} />
+      <meshStandardMaterial color="#8a6fc4" emissive="#3d2f66" emissiveIntensity={0.3} roughness={1} />
+    </instancedMesh>
+  )
+}
+
+function OuterGardens({ mobile }: { mobile: boolean }) {
+  return (
+    <group>
+      {CYPRESS_SPOTS.map((spot, index) => (
+        <Cypress key={index} position={spot} tall={5.4 + (index % 4) * 0.7} />
+      ))}
+      <Village />
+      <LavenderField count={mobile ? 40 : 70} />
+    </group>
+  )
+}
+
+// A pétanque piste on the west lawn — a sandy court with a wooden border, a
+// small cluster of steel boules and the little wooden cochonnet.
+function PetanqueCourt({ highlighted }: { highlighted: boolean }) {
+  const [x, , z] = stationPositions.petanque
+  return (
+    <group position={[x, 0, z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <planeGeometry args={[5, 7]} />
+        <meshStandardMaterial color="#b9a37a" roughness={1} />
+      </mesh>
+      {[3.5, -3.5].map((bz) => (
+        <mesh key={`edge-${bz}`} position={[0, 0.1, bz]}>
+          <boxGeometry args={[5.2, 0.2, 0.2]} />
+          <meshStandardMaterial color="#5a3f28" roughness={0.9} />
+        </mesh>
+      ))}
+      {[2.5, -2.5].map((bx) => (
+        <mesh key={`side-${bx}`} position={[bx, 0.1, 0]}>
+          <boxGeometry args={[0.2, 0.2, 7.2]} />
+          <meshStandardMaterial color="#5a3f28" roughness={0.9} />
+        </mesh>
+      ))}
+      {[[0.4, 1.2], [-0.6, 1.8], [0.9, 2.2]].map(([bx, bz], index) => (
+        <mesh key={`boule-${index}`} position={[bx, 0.16, bz]}>
+          <sphereGeometry args={[0.16, 14, 14]} />
+          <meshStandardMaterial color="#9aa0aa" metalness={0.6} roughness={0.3} />
+        </mesh>
+      ))}
+      <mesh position={[0.2, 0.11, 2.5]}>
+        <sphereGeometry args={[0.08, 10, 10]} />
+        <meshStandardMaterial color="#d8a24a" roughness={0.7} />
+      </mesh>
+      <StationTitle position={[0, 3.4, 0]} title="La Pétanque" subtitle="Tu tires ou tu pointes ?" highlighted={highlighted} />
+    </group>
+  )
+}
+
+// A bistro corner on the east lawn — a parasol table with a few pastries.
+function CafeCart({ highlighted }: { highlighted: boolean }) {
+  const [x, , z] = stationPositions.cafe
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 0.4, 0]}>
+        <cylinderGeometry args={[0.08, 0.08, 0.78, 8]} />
+        <meshStandardMaterial color="#3a4150" roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 0.78, 0]}>
+        <cylinderGeometry args={[0.7, 0.7, 0.08, 20]} />
+        <meshStandardMaterial color="#c9bda2" roughness={0.8} />
+      </mesh>
+      {[[0.25, 0.2], [-0.2, 0.25], [0.1, -0.28]].map(([px, pz], index) => (
+        <mesh key={`pastry-${index}`} position={[px, 0.87, pz]}>
+          <torusGeometry args={[0.08, 0.04, 8, 14]} />
+          <meshStandardMaterial color="#d9a24a" roughness={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[0, 1.65, 0]}>
+        <cylinderGeometry args={[0.05, 0.05, 1.9, 8]} />
+        <meshStandardMaterial color="#5a3f28" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 2.55, 0]}>
+        <coneGeometry args={[1.7, 0.7, 14]} />
+        <meshStandardMaterial color="#c0392b" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 2.62, 0]}>
+        <coneGeometry args={[1.72, 0.2, 14]} />
+        <meshStandardMaterial color="#eceae2" roughness={0.8} />
+      </mesh>
+      <pointLight position={[0, 1.5, 0]} intensity={5} distance={8} color="#ffcf8a" />
+      <StationTitle position={[0, 3.1, 0]} title="Le Petit Café" subtitle="Catch the pastries" highlighted={highlighted} />
     </group>
   )
 }

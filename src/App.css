@@ -1620,6 +1620,141 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
+/* --- La Pétanque --- */
+.petanque-court {
+  position: relative;
+  width: min(22rem, 100%);
+  height: min(42dvh, 16rem);
+  border-radius: 0.9rem;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255, 236, 179, 0.12), transparent 55%),
+    linear-gradient(180deg, #7d6a49, #4f4230);
+  border: 2px solid #5a3f28;
+  box-shadow: inset 0 0 22px rgba(0, 0, 0, 0.4);
+}
+
+.petanque-jack {
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe0a0, #c9832f);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px rgba(255, 200, 120, 0.7);
+}
+
+.petanque-boule {
+  position: absolute;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #eef1f6, #6f7681 65%, #3f444d);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  animation: bouleDrop 0.35s ease both;
+}
+
+@keyframes bouleDrop {
+  from {
+    transform: translate(-50%, -140%) scale(1.3);
+    opacity: 0.4;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.petanque-reticle {
+  position: absolute;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px dashed rgba(255, 246, 210, 0.85);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.petanque-launch {
+  position: absolute;
+  left: 50%;
+  top: 90%;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 50% 40%, rgba(255, 246, 210, 0.5), transparent 70%);
+}
+
+.petanque-power {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  width: 0.7rem;
+  height: 45%;
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.petanque-power-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #ffd27a, #ff7a7a);
+}
+
+.petanque-controls,
+.petanque-verdict {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  margin: 0.2rem 0;
+}
+
+.petanque-verdict {
+  font-size: clamp(0.9rem, 2.6vw, 1.05rem);
+  color: #fff2d6;
+}
+
+.petanque-flavor {
+  font-style: italic;
+  opacity: 0.92;
+}
+
+/* --- Le Petit Café --- */
+.cafe-field {
+  position: relative;
+  width: min(22rem, 100%);
+  height: min(42dvh, 16rem);
+  border-radius: 0.9rem;
+  overflow: hidden;
+  touch-action: none;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(255, 207, 138, 0.18), transparent 60%),
+    linear-gradient(180deg, #14172a, #241a33);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cafe-item {
+  position: absolute;
+  font-size: 1.5rem;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.cafe-basket {
+  position: absolute;
+  bottom: 4%;
+  font-size: 2rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
 /* the road surface scrolls downward to sell a sense of forward motion */
 .drive-road {
   position: absolute;

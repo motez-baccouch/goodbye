@@ -611,6 +611,305 @@ export function StationMiniGame({
   )
 }
 
+// ---------------------------------------------------------------------------
+// La Pétanque — an optional French skill game: aim, set power, land near the
+// cochonnet. Two-stage timing (angle then power); closest boule wins.
+// ---------------------------------------------------------------------------
+
+export function PetanqueGame({ onClose }: { onClose: () => void }) {
+  const [phase, setPhase] = useState<'aim' | 'power' | 'roll' | 'done'>('aim')
+  const [throwsLeft, setThrowsLeft] = useState(3)
+  const [boules, setBoules] = useState<Array<{ id: number; x: number; y: number }>>([])
+  const [meter, setMeter] = useState(0)
+  const [aim, setAim] = useState(0)
+  const [best, setBest] = useState<number | null>(null)
+  const [jack, setJack] = useState({ x: 50, y: 18 })
+  const dirRef = useRef(1)
+  const idRef = useRef(0)
+
+  useEffect(() => {
+    // place the cochonnet with a little sideways variety each game (deferred to a
+    // timeout so it isn't a synchronous setState inside the effect body)
+    const id = window.setTimeout(() => {
+      setJack({ x: 36 + Math.random() * 28, y: 15 + Math.random() * 8 })
+    }, 0)
+    return () => window.clearTimeout(id)
+  }, [])
+
+  useEffect(() => {
+    if (phase !== 'aim' && phase !== 'power') {
+      return
+    }
+    const interval = window.setInterval(() => {
+      setMeter((m) => {
+        let n = m + dirRef.current * 0.045
+        if (n >= 1) {
+          n = 1
+          dirRef.current = -1
+        }
+        if (n <= 0) {
+          n = 0
+          dirRef.current = 1
+        }
+        return n
+      })
+    }, 28)
+    return () => window.clearInterval(interval)
+  }, [phase])
+
+  const previewAngle = (meter * 2 - 1) * 0.35
+  const lockedAngle = aim * 0.35
+
+  const lockAim = () => {
+    if (phase !== 'aim') {
+      return
+    }
+    playTone('focus')
+    haptic(8)
+    setAim(meter * 2 - 1)
+    setMeter(0)
+    dirRef.current = 1
+    setPhase('power')
+  }
+
+  const throwBoule = () => {
+    if (phase !== 'power') {
+      return
+    }
+    const power = meter
+    playTone('road')
+    haptic(14)
+    const travel = 30 + power * 65
+    const noise = (Math.random() - 0.5) * 5
+    const landX = Math.max(6, Math.min(94, 50 + Math.sin(lockedAngle) * travel + noise))
+    const landY = Math.max(6, 90 - Math.cos(lockedAngle) * travel)
+    const dist = Math.hypot(landX - jack.x, landY - jack.y)
+    const cm = Math.round(dist * 3.2)
+    const id = idRef.current + 1
+    idRef.current = id
+    setBoules((current) => [...current, { id, x: landX, y: landY }])
+    setBest((prev) => (prev === null ? cm : Math.min(prev, cm)))
+
+    const remaining = throwsLeft - 1
+    setThrowsLeft(remaining)
+    setPhase('roll')
+    window.setTimeout(() => {
+      setMeter(0)
+      dirRef.current = 1
+      if (remaining <= 0) {
+        setPhase('done')
+        playTone('win')
+        haptic([14, 40, 14])
+      } else {
+        setPhase('aim')
+      }
+    }, 800)
+  }
+
+  if (phase === 'done') {
+    const verdict =
+      best === null
+        ? ''
+        : best <= 14
+          ? 'Un carreau ! The retired uncles at the boulodrome would stand and clap. 👏'
+          : best <= 32
+            ? "Pas mal ! You'd hold your own on a Marseille afternoon."
+            : 'Your boule left to see France on its own. Bon voyage to it. 🥖'
+    return (
+      <div className="minigame-complete">
+        <SparkBurst count={22} />
+        <div className="minigame-complete-badge" aria-hidden="true">
+          ✦
+        </div>
+        <h2>{best !== null && best <= 14 ? 'Champion du jardin.' : 'La partie est finie.'}</h2>
+        <p className="petanque-verdict">
+          Closest boule: <strong>{best} cm</strong> from the cochonnet.
+        </p>
+        <p className="petanque-verdict petanque-flavor">{verdict}</p>
+        <button type="button" className="collect-button" onClick={onClose}>
+          Back to the garden
+        </button>
+      </div>
+    )
+  }
+
+  const reticleAngle = phase === 'aim' ? previewAngle : lockedAngle
+  const reticleX = 50 + Math.sin(reticleAngle) * 40
+  const reticleY = 90 - Math.cos(reticleAngle) * 40
+
+  return (
+    <>
+      <p className="minigame-instruction">
+        {phase === 'aim'
+          ? '« Tu tires ou tu pointes ? » — tap to lock your aim.'
+          : phase === 'power'
+            ? 'Now the power — tap Throw to release the boule.'
+            : 'Nice throw…'}
+      </p>
+      <div className="petanque-court" aria-label="Pétanque court">
+        <span className="petanque-jack" style={{ left: `${jack.x}%`, top: `${jack.y}%` }} aria-hidden="true" />
+        {boules.map((boule) => (
+          <span
+            key={boule.id}
+            className="petanque-boule"
+            style={{ left: `${boule.x}%`, top: `${boule.y}%` }}
+            aria-hidden="true"
+          />
+        ))}
+        {phase !== 'roll' ? (
+          <span className="petanque-reticle" style={{ left: `${reticleX}%`, top: `${reticleY}%` }} aria-hidden="true" />
+        ) : null}
+        <span className="petanque-launch" aria-hidden="true" />
+        {phase === 'power' ? (
+          <div className="petanque-power" aria-hidden="true">
+            <div className="petanque-power-fill" style={{ height: `${Math.round(meter * 100)}%` }} />
+          </div>
+        ) : null}
+      </div>
+      <div className="petanque-controls">
+        <button type="button" className="collect-button minigame-action" onClick={phase === 'aim' ? lockAim : throwBoule}>
+          {phase === 'aim' ? 'Set aim' : phase === 'power' ? 'Throw' : '…'}
+        </button>
+        <p className="minigame-progress">
+          {throwsLeft} boules left{best !== null ? ` · best ${best} cm` : ''}
+        </p>
+      </div>
+      <button type="button" className="minigame-leave" onClick={onClose}>
+        Leave for now
+      </button>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Le Petit Café — an optional reflex game: catch the falling French pastries.
+// ---------------------------------------------------------------------------
+
+const PASTRIES = ['🥐', '🧁', '🥖', '🍮', '🥨']
+
+export function MacaronGame({ onClose }: { onClose: () => void }) {
+  const TARGET = 12
+  const [caught, setCaught] = useState(0)
+  const [items, setItems] = useState<Array<{ id: number; x: number; y: number; glyph: string }>>([])
+  const [basketX, setBasketX] = useState(50)
+  const basketRef = useRef(50)
+  const caughtRef = useRef(0)
+  const idRef = useRef(0)
+  const tickRef = useRef(0)
+
+  const done = caught >= TARGET
+
+  useEffect(() => {
+    basketRef.current = basketX
+  }, [basketX])
+  useEffect(() => {
+    caughtRef.current = caught
+  }, [caught])
+
+  useEffect(() => {
+    if (done) {
+      return
+    }
+    const interval = window.setInterval(() => {
+      if (document.hidden) {
+        return
+      }
+      tickRef.current += 1
+      setItems((current) => {
+        let next = current.map((item) => ({ ...item, y: item.y + 3.1 }))
+        if (tickRef.current % 9 === 0) {
+          idRef.current += 1
+          next.push({
+            id: idRef.current,
+            x: 8 + Math.random() * 84,
+            y: -6,
+            glyph: PASTRIES[idRef.current % PASTRIES.length],
+          })
+        }
+        next = next.filter((item) => {
+          if (item.y >= 80 && item.y <= 94 && Math.abs(item.x - basketRef.current) < 11) {
+            playPickup(caughtRef.current % 6)
+            haptic(10)
+            setCaught((c) => Math.min(TARGET, c + 1))
+            return false
+          }
+          return item.y < 100
+        })
+        return next
+      })
+    }, 34)
+    return () => window.clearInterval(interval)
+  }, [done])
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft' || event.key === 'a') setBasketX((x) => Math.max(6, x - 8))
+      if (event.key === 'ArrowRight' || event.key === 'd') setBasketX((x) => Math.min(94, x + 8))
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
+
+  if (done) {
+    return (
+      <CompleteBanner label="Le café is proud of you." onClose={onClose}>
+        <p className="petanque-verdict petanque-flavor">
+          Twelve pastries, zero regrets. Somewhere, a French boulanger sheds a single proud tear. 🥐
+        </p>
+      </CompleteBanner>
+    )
+  }
+
+  return (
+    <>
+      <p className="minigame-instruction">Slide the basket — catch {TARGET} pastries before they hit the pavé.</p>
+      <div
+        className="cafe-field"
+        aria-label="Pastry-catch mini-game"
+        onPointerMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          setBasketX(Math.max(6, Math.min(94, ((event.clientX - rect.left) / rect.width) * 100)))
+        }}
+      >
+        {items.map((item) => (
+          <span key={item.id} className="cafe-item" style={{ left: `${item.x}%`, top: `${item.y}%` }} aria-hidden="true">
+            {item.glyph}
+          </span>
+        ))}
+        <span className="cafe-basket" style={{ left: `${basketX}%` }} aria-hidden="true">
+          🧺
+        </span>
+      </div>
+      <div className="petanque-controls">
+        <button type="button" className="collect-button drive-steer" onClick={() => setBasketX((x) => Math.max(6, x - 8))}>
+          ◀
+        </button>
+        <p className="minigame-progress">
+          {caught}/{TARGET} caught
+        </p>
+        <button type="button" className="collect-button drive-steer" onClick={() => setBasketX((x) => Math.min(94, x + 8))}>
+          ▶
+        </button>
+      </div>
+      <button type="button" className="minigame-leave" onClick={onClose}>
+        Leave for now
+      </button>
+    </>
+  )
+}
+
+// A shared overlay wrapper for the two optional French games.
+export function OptionalGame({ game, onClose }: { game: 'petanque' | 'cafe'; onClose: () => void }) {
+  return (
+    <div className="experience-overlay minigame-overlay">
+      <div className="overlay-panel garden-panel minigame-panel">
+        <p className="overlay-kicker">{game === 'petanque' ? 'La Pétanque' : 'Le Petit Café'}</p>
+        {game === 'petanque' ? <PetanqueGame onClose={onClose} /> : <MacaronGame onClose={onClose} />}
+      </div>
+    </div>
+  )
+}
+
 // Reading game needs onStep wired to its turn button; kept controlled here.
 function ReadingGameControlled({ progress, total, paused, onStep, onClose }: MiniGameProps) {
   const done = progress >= total
