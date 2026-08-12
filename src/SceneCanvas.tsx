@@ -2,12 +2,12 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Clone, Float, Line, RoundedBox, Sparkles, Stars, Text, useGLTF, useTexture } from '@react-three/drei'
 import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
-import { haptic, playFootstep, playTone, unlockAudio } from './audioEngine'
+import { haptic, playFootstep, playMelody, playTone, unlockAudio } from './audioEngine'
 import { isMusicMuted, notifyFinale, setMusicMuted, startMusic } from './ambientMusic'
 import { chapters, finalLetter } from './experienceData'
 import { SparkBurst, StationMiniGame } from './MiniGames'
 
-type StationId = 'gate' | 'archive' | 'lanterns' | 'path' | 'reading' | 'final'
+type StationId = 'gate' | 'archive' | 'lanterns' | 'path' | 'reading' | 'final' | 'piano'
 type SecretId = 'moon' | 'teddy' | 'padel' | 'book' | 'maze' | 'boss' | 'france' | 'cart'
 
 const TOTAL_SECRETS = 8
@@ -51,6 +51,7 @@ const stationPositions: Record<StationId, Vec3> = {
   path: [-9, 0, -33],
   reading: [9, 0, -33],
   final: [0, 0, -42],
+  piano: [-5, 0, -0.5],
 }
 
 // fixed-position secrets the guiding arrow can point to once the memories are done
@@ -372,13 +373,21 @@ function createSteppingPathTexture() {
     return new THREE.Texture()
   }
 
-  context.fillStyle = '#42465e'
+  // dark grout
+  context.fillStyle = '#2f3348'
   context.fillRect(0, 0, canvas.width, canvas.height)
 
-  for (let index = 0; index < 4; index += 1) {
-    const y = ((index + 0.5) / 4) * canvas.height
-    const x = canvas.width / 2 + (index % 2 ? 16 : -16)
-    drawStone(context, x, y, 176 + Math.random() * 30, 96, (Math.random() - 0.5) * 0.16, stonePalette[index % stonePalette.length])
+  // neat fitted cobbles, staggered brick-style — much tidier than big pills
+  const cols = 3
+  const rows = 8
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const x = ((col + 0.5 + (row % 2 ? 0.3 : 0)) / cols) * canvas.width
+      const y = ((row + 0.5) / rows) * canvas.height
+      const width = (canvas.width / cols) * (0.82 + Math.random() * 0.12)
+      const height = (canvas.height / rows) * (0.8 + Math.random() * 0.12)
+      drawStone(context, x, y, width, height, (Math.random() - 0.5) * 0.1, stonePalette[(row * cols + col) % stonePalette.length])
+    }
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -669,6 +678,7 @@ function getNearbyInteractable(player: PlayerSample, gateOpen: boolean): Interac
     { id: 'path', radius: 3.4 },
     { id: 'reading', radius: 3.4 },
     { id: 'final', radius: 3.6 },
+    { id: 'piano', radius: 3 },
   ]
 
   let nearest: Interactable | null = null
@@ -743,6 +753,8 @@ function getInteractLabel(
     case 'final':
       if (!finalUnlocked) return 'Door Locked'
       return finalOpen ? 'Read Again' : 'Reveal Letter'
+    case 'piano':
+      return 'Play a Melody'
     default:
       return 'Interact'
   }
@@ -785,6 +797,7 @@ function SceneCanvas() {
   const [deviceProfile, setDeviceProfile] = useState<DeviceProfile>(() => getDeviceProfile())
   const [overlayMode, setOverlayMode] = useState<'intro' | 'help' | 'journal' | 'map' | null>('intro')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [pianoPlaying, setPianoPlaying] = useState(false)
   const [detailMessage, setDetailMessage] = useState('')
   const [hintIndex, setHintIndex] = useState(0)
   const [hintVisible, setHintVisible] = useState(false)
@@ -1188,16 +1201,18 @@ function SceneCanvas() {
   const interactLabel = seat
     ? 'Stand Up'
     : interactable
-      ? getInteractLabel(
-          interactable.id,
-          gateOpen,
-          finalUnlocked,
-          finalOpen,
-          archiveOpened,
-          lanternsLit,
-          pathCollected,
-          pagesTurned,
-        )
+      ? interactable.id === 'piano' && pianoPlaying
+        ? 'Playing…'
+        : getInteractLabel(
+            interactable.id,
+            gateOpen,
+            finalUnlocked,
+            finalOpen,
+            archiveOpened,
+            lanternsLit,
+            pathCollected,
+            pagesTurned,
+          )
       : nearbySeat
         ? 'Sit Down'
         : 'Walk Closer'
@@ -1399,6 +1414,21 @@ function SceneCanvas() {
       notifyFinale()
       setFinalOpen(true)
       setDetailMessage('For Noura.')
+      return
+    }
+
+    if (interactable.id === 'piano') {
+      if (pianoPlaying) {
+        playTone('focus')
+        setDetailMessage('The melody is still playing. Let it breathe.')
+        return
+      }
+
+      const duration = playMelody()
+      haptic(12)
+      setPianoPlaying(true)
+      setDetailMessage('A quiet melody drifts out across the moonlit garden.')
+      window.setTimeout(() => setPianoPlaying(false), duration || 9000)
     }
   }
 
@@ -1471,6 +1501,7 @@ function SceneCanvas() {
           <GardenTrees />
           <GardenModels />
         </Suspense>
+        <SkyConstellations />
         <Comet nonce={cometNonce} />
         <ShootingStars />
         <Fireworks active={forceFireworks || (finalOpen && !letterVisible && !creditsVisible && !epilogue)} />
@@ -1533,6 +1564,18 @@ function SceneCanvas() {
         <div className="garden-menu">
           <button
             type="button"
+            className="hud-icon-button"
+            aria-label="Map"
+            onClick={() => {
+              playTone('map')
+              setOverlayMode('map')
+              setMenuOpen(false)
+            }}
+          >
+            🗺️
+          </button>
+          <button
+            type="button"
             className={`menu-toggle${menuOpen ? ' open' : ''}`}
             aria-label="Menu"
             aria-expanded={menuOpen}
@@ -1545,16 +1588,6 @@ function SceneCanvas() {
           </button>
           {menuOpen ? (
             <div className="menu-dropdown">
-              <button
-                type="button"
-                onClick={() => {
-                  playTone('map')
-                  setOverlayMode('map')
-                  setMenuOpen(false)
-                }}
-              >
-                <span className="menu-icon">🗺️</span> Map
-              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -2142,6 +2175,7 @@ function FirstPersonRig({
     const colliders = [
       { x: 0, z: -2, radius: 1.2 },
       { x: 0, z: -46, radius: 1.35 },
+      { x: -5, z: -0.5, radius: 1.1 },
     ]
 
     colliders.forEach((collider) => {
@@ -2187,10 +2221,9 @@ function FirstPersonRig({
       -Math.cos(yawRef.current) * Math.cos(pitchRef.current),
     )
 
-    // a little life: gentle breathing when still, a soft bob while walking
+    // a soft head-bob only while actually walking (stable when standing still)
     const speed = Math.min(1, velocity.length())
-    const bob =
-      Math.sin(clock.elapsedTime * 1.3) * 0.014 + Math.sin(clock.elapsedTime * 8.5) * speed * 0.028
+    const bob = Math.sin(clock.elapsedTime * 8.5) * speed * 0.022
     camera.position.set(positionRef.current.x, positionRef.current.y + bob, positionRef.current.z)
     camera.lookAt(tmpLookTarget.copy(positionRef.current).add(direction))
 
@@ -2557,12 +2590,8 @@ function NightGarden({ deviceProfile }: { deviceProfile: DeviceProfile }) {
       <GardenHedges />
       <Labyrinth />
       {flowerPositions.map((flower, index) => (
-        <Sway key={index} seed={index * 1.3} strength={0.08}>
-          <FlowerCluster
-            position={[flower.x, 0, flower.z]}
-            scale={flower.scale}
-            palette={flower.hue}
-          />
+        <Sway key={index} seed={index * 1.3} strength={0.08} position={[flower.x, 0, flower.z]}>
+          <FlowerCluster position={[0, 0, 0]} scale={flower.scale} palette={flower.hue} />
         </Sway>
       ))}
       <LanternPosts />
@@ -2613,38 +2642,32 @@ function PathRibbon({ start, end, width }: { start: Vec3; end: Vec3; width: numb
   )
 }
 
-function configureMoonTexture(texture: THREE.Texture | THREE.Texture[]) {
-  const single = Array.isArray(texture) ? texture[0] : texture
-  single.colorSpace = THREE.SRGBColorSpace
-  single.anisotropy = 16
-  single.needsUpdate = true
-}
+const moonCraters: Array<{ p: Vec3; r: number }> = [
+  { p: [1.8, 1.5, 5.4], r: 0.8 },
+  { p: [-2.2, -0.6, 5.35], r: 1.1 },
+  { p: [0.6, -2.4, 5.25], r: 0.6 },
+  { p: [2.6, -1.5, 4.95], r: 0.7 },
+  { p: [-1.1, 2.6, 5.05], r: 0.5 },
+  { p: [-0.2, 0.3, 5.9], r: 0.9 },
+]
 
 function MoonRig() {
-  const moonTexture = useTexture('/assets/textures/moon.jpg', configureMoonTexture)
   const glowTexture = useMemo(() => createGlowTexture(), [])
-  const moonRef = useRef<THREE.Mesh>(null)
-
-  useFrame((_, delta) => {
-    if (moonRef.current) {
-      moonRef.current.rotation.y += delta * 0.008
-    }
-  })
 
   return (
     <group position={[9, 16, -58]} userData={{ secret: 'moon' }}>
-      <mesh ref={moonRef} rotation={[0.35, 2.2, 0.12]}>
-        <sphereGeometry args={[6, 64, 64]} />
-        <meshStandardMaterial
-          map={moonTexture}
-          emissiveMap={moonTexture}
-          emissive="#fff4dc"
-          emissiveIntensity={1.42}
-          color="#0c0f1a"
-          roughness={1}
-          fog={false}
-        />
+      {/* stylised, flat-shaded low-poly moon to match the rest of the garden */}
+      <mesh>
+        <icosahedronGeometry args={[6, 3]} />
+        <meshStandardMaterial color="#f2ead2" emissive="#fff2d2" emissiveIntensity={0.7} roughness={1} flatShading fog={false} />
       </mesh>
+      {/* simple crater discs on the visible face */}
+      {moonCraters.map((crater, index) => (
+        <mesh key={index} position={crater.p}>
+          <circleGeometry args={[crater.r, 18]} />
+          <meshStandardMaterial color="#dccfb2" emissive="#e6dabb" emissiveIntensity={0.35} roughness={1} fog={false} />
+        </mesh>
+      ))}
       {/* layered corona: tight warm core → gold bloom → wide cool atmosphere */}
       <sprite scale={[14, 14, 1]}>
         <spriteMaterial map={glowTexture} color="#fff6d8" transparent opacity={0.6} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
@@ -2889,6 +2912,77 @@ const EIFFEL_STARS: Vec3[] = [
   [0, 1.2, 0],
 ]
 
+// Faint, glowing constellations scattered high in the night sky for ambience.
+const CONSTELLATION_STAR: Vec3[] = [
+  [0, 2, 0],
+  [-1.18, -1.62, 0],
+  [1.9, 0.62, 0],
+  [-1.9, 0.62, 0],
+  [1.18, -1.62, 0],
+  [0, 2, 0],
+]
+const CONSTELLATION_HEART: Vec3[] = [
+  [0, 1.2, 0],
+  [0.9, 1.8, 0],
+  [1.6, 1.4, 0],
+  [1.7, 0.4, 0],
+  [0.9, -0.7, 0],
+  [0, -1.6, 0],
+  [-0.9, -0.7, 0],
+  [-1.7, 0.4, 0],
+  [-1.6, 1.4, 0],
+  [-0.9, 1.8, 0],
+  [0, 1.2, 0],
+]
+const CONSTELLATION_W: Vec3[] = [
+  [-2, 0.5, 0],
+  [-1, -0.4, 0],
+  [0, 0.4, 0],
+  [1, -0.5, 0],
+  [2, 0.3, 0],
+]
+
+function SkyConstellation({
+  points,
+  position,
+  scale = 1,
+  color = '#cfe0ff',
+}: {
+  points: Vec3[]
+  position: Vec3
+  scale?: number
+  color?: string
+}) {
+  const glowTexture = useMemo(() => createGlowTexture(), [])
+
+  return (
+    <group position={position} scale={scale}>
+      <Line points={points} color={color} lineWidth={1} transparent opacity={0.32} />
+      {points.slice(0, -1).map((point, index) => (
+        <group key={index} position={point}>
+          <mesh>
+            <sphereGeometry args={[0.1, 8, 8]} />
+            <meshBasicMaterial color="#fff6d8" fog={false} />
+          </mesh>
+          <sprite scale={[0.85, 0.85, 1]}>
+            <spriteMaterial map={glowTexture} color={color} transparent opacity={0.55} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
+          </sprite>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+function SkyConstellations() {
+  return (
+    <group>
+      <SkyConstellation points={CONSTELLATION_STAR} position={[-19, 23, -64]} scale={1.5} color="#ffe6a1" />
+      <SkyConstellation points={CONSTELLATION_HEART} position={[17, 25, -66]} scale={1.3} color="#ffb3dc" />
+      <SkyConstellation points={CONSTELLATION_W} position={[3, 29, -68]} scale={1.7} color="#bcccff" />
+    </group>
+  )
+}
+
 // A small, stylised low-poly Eiffel tower — a quiet nod to "break a leg in
 // France" standing on the far horizon behind the garden.
 function EiffelTower({ position, scale = 1 }: { position: Vec3; scale?: number }) {
@@ -3027,10 +3121,12 @@ function Sway({
   children,
   seed,
   strength = 0.06,
+  position,
 }: {
   children: React.ReactNode
   seed: number
   strength?: number
+  position?: Vec3
 }) {
   const groupRef = useRef<THREE.Group>(null)
 
@@ -3044,7 +3140,14 @@ function Sway({
     }
   })
 
-  return <group ref={groupRef}>{children}</group>
+  // The outer group carries the world position; the inner (rotated) group sits
+  // at the local origin so the sway pivots at the plant's own base — otherwise
+  // far-away objects swing in huge arcs and dip below the ground.
+  return (
+    <group position={position}>
+      <group ref={groupRef}>{children}</group>
+    </group>
+  )
 }
 
 let cachedPetalTexture: THREE.Texture | null = null
@@ -3548,11 +3651,76 @@ function TeaCorner() {
   )
 }
 
+// A low-poly upright piano the visitor can play, candlelit for a little magic.
+function Piano({ position, rotationY = 0 }: { position: Vec3; rotationY?: number }) {
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      {/* body */}
+      <mesh position={[0, 0.9, 0]}>
+        <boxGeometry args={[1.7, 1.3, 0.55]} />
+        <meshStandardMaterial color="#2b2233" roughness={0.5} metalness={0.1} />
+      </mesh>
+      {/* top lid */}
+      <mesh position={[0, 1.6, 0.06]}>
+        <boxGeometry args={[1.82, 0.12, 0.7]} />
+        <meshStandardMaterial color="#221b29" roughness={0.5} />
+      </mesh>
+      {/* front panel accent */}
+      <mesh position={[0, 1.15, 0.29]}>
+        <boxGeometry args={[1.4, 0.55, 0.02]} />
+        <meshStandardMaterial color="#392b41" roughness={0.4} emissive="#241a2c" emissiveIntensity={0.2} />
+      </mesh>
+      {/* keyboard shelf */}
+      <mesh position={[0, 0.9, 0.35]}>
+        <boxGeometry args={[1.55, 0.12, 0.3]} />
+        <meshStandardMaterial color="#f5f1e6" roughness={0.35} />
+      </mesh>
+      {/* black keys */}
+      {Array.from({ length: 11 }).map((_, index) => (
+        <mesh key={index} position={[-0.66 + index * 0.132, 0.98, 0.33]}>
+          <boxGeometry args={[0.05, 0.03, 0.16]} />
+          <meshStandardMaterial color="#141019" />
+        </mesh>
+      ))}
+      {/* legs */}
+      {[-0.76, 0.76].map((x) => (
+        <mesh key={x} position={[x, 0.12, 0]}>
+          <boxGeometry args={[0.16, 0.25, 0.5]} />
+          <meshStandardMaterial color="#221b29" roughness={0.55} />
+        </mesh>
+      ))}
+      {/* candelabra glow on top */}
+      {[-0.5, 0.5].map((x) => (
+        <mesh key={`candle-${x}`} position={[x, 1.74, 0]}>
+          <sphereGeometry args={[0.05, 8, 8]} />
+          <meshStandardMaterial color="#ffe9ad" emissive="#ffe9ad" emissiveIntensity={1.5} toneMapped={false} />
+        </mesh>
+      ))}
+      <LampGlow position={[-0.5, 1.77, 0]} scale={0.9} color="#ffe9ad" opacity={0.4} />
+      <LampGlow position={[0.5, 1.77, 0]} scale={0.9} color="#ffe9ad" opacity={0.4} />
+      <Sparkles count={8} scale={[1.8, 1.2, 1]} position={[0, 1.95, 0]} size={1.3} speed={0.2} color="#fff0bd" />
+      {/* bench */}
+      <mesh position={[0, 0.42, 1.0]}>
+        <boxGeometry args={[1, 0.1, 0.34]} />
+        <meshStandardMaterial color="#3a2e42" roughness={0.6} />
+      </mesh>
+      {[-0.4, 0.4].map((x) => (
+        <mesh key={`bench-leg-${x}`} position={[x, 0.18, 1.0]}>
+          <boxGeometry args={[0.08, 0.36, 0.08]} />
+          <meshStandardMaterial color="#2b2233" roughness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 function GardenModels() {
   return (
     <group>
       {/* tea for two at the plaza centre */}
       <TeaCorner />
+      {/* a candlelit piano you can play */}
+      <Piano position={stationPositions.piano} rotationY={1.7} />
 
       {/* the moon-ring monument watches from behind the white-rose arch */}
       <SafeModel file="statue_block.glb" position={[0, 0, -46]} scale={3} tint="stone" />
@@ -3560,28 +3728,27 @@ function GardenModels() {
 
       {/* flower ring around the plaza */}
       {plazaFlowerRing.map((flower, index) => (
-        <Sway key={`plaza-flower-${index}`} seed={index * 1.7} strength={0.06}>
-          <SafeModel
-            file={flower.file}
-            position={[Math.cos(flower.angle) * 5.4, 0, -2 + Math.sin(flower.angle) * 5.4]}
-            scale={1.5}
-            rotationY={flower.angle * 2}
-            tint="flower"
-          />
+        <Sway
+          key={`plaza-flower-${index}`}
+          seed={index * 1.7}
+          strength={0.06}
+          position={[Math.cos(flower.angle) * 5.4, 0, -2 + Math.sin(flower.angle) * 5.4]}
+        >
+          <SafeModel file={flower.file} position={[0, 0, 0]} scale={1.5} rotationY={flower.angle * 2} tint="flower" />
         </Sway>
       ))}
 
       {/* flowers along the walks */}
       {pathsideFlowers.map((flower, index) => (
-        <Sway key={`path-flower-${index}`} seed={index * 2.3 + 9} strength={0.07}>
-          <SafeModel file={flower.file} position={flower.position} scale={1.45} rotationY={index * 1.9} tint="flower" />
+        <Sway key={`path-flower-${index}`} seed={index * 2.3 + 9} strength={0.07} position={flower.position}>
+          <SafeModel file={flower.file} position={[0, 0, 0]} scale={1.45} rotationY={index * 1.9} tint="flower" />
         </Sway>
       ))}
 
       {/* grass tufts that lean with the wind */}
       {grassTufts.map((tuft, index) => (
-        <Sway key={`tuft-${index}`} seed={index * 3.1 + 20} strength={0.12}>
-          <SafeModel file="grass_leafs.glb" position={tuft.position} scale={tuft.scale} rotationY={index * 2.4} />
+        <Sway key={`tuft-${index}`} seed={index * 3.1 + 20} strength={0.12} position={tuft.position}>
+          <SafeModel file="grass_leafs.glb" position={[0, 0, 0]} scale={tuft.scale} rotationY={index * 2.4} />
         </Sway>
       ))}
 
@@ -3619,11 +3786,11 @@ function GardenModels() {
 
       {/* a little flower cart resting by the gate */}
       <SafeModel file="town/cart.glb" position={[6.8, 0, 3.2]} scale={0.85} rotationY={-0.6} />
-      <Sway seed={31} strength={0.05}>
-        <SafeModel file="flower_purpleA.glb" position={[6.6, 0.62, 3.1]} scale={1} tint="flower" />
+      <Sway seed={31} strength={0.05} position={[6.6, 0.62, 3.1]}>
+        <SafeModel file="flower_purpleA.glb" position={[0, 0, 0]} scale={1} tint="flower" />
       </Sway>
-      <Sway seed={32} strength={0.05}>
-        <SafeModel file="flower_yellowA.glb" position={[7.1, 0.62, 3.4]} scale={0.95} tint="flower" />
+      <Sway seed={32} strength={0.05} position={[7.1, 0.62, 3.4]}>
+        <SafeModel file="flower_yellowA.glb" position={[0, 0, 0]} scale={0.95} tint="flower" />
       </Sway>
 
       {/* urns with night blooms flanking the labyrinth mouth and exit */}
@@ -4118,33 +4285,51 @@ function RoseBush({ position, scale }: { position: Vec3; scale: number }) {
 }
 
 // One swinging gate leaf, hinged at the local origin, spanning to the centre.
+// One elegant wrought-iron gate leaf: two stiles, two rails, vertical bars that
+// rise toward the centre into an arch, spear finials, and a little moon scroll.
 function GateLeaf({ dir }: { dir: 1 | -1 }) {
-  const width = 2.6
-  const centre = dir * (width / 2)
+  const s = dir
+  const iron = '#bcc0d8'
+  const barX = [0.5, 0.95, 1.4, 1.85, 2.3]
 
   return (
     <group>
-      {/* main panel */}
-      <mesh position={[centre, 1.15, 0]}>
-        <boxGeometry args={[width, 2.3, 0.1]} />
-        <meshStandardMaterial color="#c9b596" roughness={0.7} />
-      </mesh>
-      {/* top & bottom rails */}
-      {[0.25, 2.05].map((y) => (
-        <mesh key={y} position={[centre, y, 0.07]}>
-          <boxGeometry args={[width, 0.2, 0.06]} />
-          <meshStandardMaterial color="#a98d68" roughness={0.7} />
+      {/* stiles at the hinge and meeting edges */}
+      {[0.18, 2.42].map((x, index) => (
+        <mesh key={`stile-${index}`} position={[s * x, 1.2, 0]}>
+          <boxGeometry args={[0.09, 2.5, 0.09]} />
+          <meshStandardMaterial color={iron} metalness={0.25} roughness={0.45} emissive="#3a3c58" emissiveIntensity={0.18} />
         </mesh>
       ))}
-      {/* diagonal brace */}
-      <mesh position={[centre, 1.15, 0.08]} rotation={[0, 0, dir * 0.62]}>
-        <boxGeometry args={[2.7, 0.16, 0.04]} />
-        <meshStandardMaterial color="#a98d68" roughness={0.7} />
-      </mesh>
-      {/* little moon motif near the meeting edge */}
-      <mesh position={[dir * (width - 0.35), 1.55, 0.09]}>
-        <circleGeometry args={[0.22, 20]} />
-        <meshStandardMaterial color="#fff3d0" emissive="#ffe9ad" emissiveIntensity={0.5} roughness={0.4} />
+      {/* horizontal rails */}
+      {[0.35, 1.55].map((y, index) => (
+        <mesh key={`rail-${index}`} position={[s * 1.3, y, 0]}>
+          <boxGeometry args={[2.4, 0.08, 0.07]} />
+          <meshStandardMaterial color={iron} metalness={0.25} roughness={0.45} />
+        </mesh>
+      ))}
+      {/* vertical bars with spear finials, arching toward the centre */}
+      {barX.map((x, index) => {
+        const tip = 1.95 + (x / 2.42) * 0.55
+        const barBottom = 0.25
+        const barHeight = tip - barBottom
+        return (
+          <group key={`bar-${index}`} position={[s * x, 0, 0]}>
+            <mesh position={[0, barBottom + barHeight / 2, 0]}>
+              <cylinderGeometry args={[0.026, 0.026, barHeight, 6]} />
+              <meshStandardMaterial color={iron} metalness={0.25} roughness={0.45} emissive="#3a3c58" emissiveIntensity={0.15} />
+            </mesh>
+            <mesh position={[0, tip + 0.08, 0]}>
+              <coneGeometry args={[0.045, 0.16, 6]} />
+              <meshStandardMaterial color="#e8e6f4" emissive="#ffe9ad" emissiveIntensity={0.25} metalness={0.3} roughness={0.4} />
+            </mesh>
+          </group>
+        )
+      })}
+      {/* a little moon-scroll motif near the meeting edge */}
+      <mesh position={[s * 2.05, 0.95, 0.04]}>
+        <torusGeometry args={[0.2, 0.03, 8, 20]} />
+        <meshStandardMaterial color={iron} metalness={0.25} roughness={0.45} emissive="#6a6c8a" emissiveIntensity={0.22} />
       </mesh>
     </group>
   )

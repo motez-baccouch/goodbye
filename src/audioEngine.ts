@@ -389,6 +389,77 @@ export function haptic(pattern: number | number[] = 12) {
   }
 }
 
+// A gentle, tender piano melody for the garden piano. Returns its length in ms.
+export function playMelody(): number {
+  const context = getContext()
+
+  if (!context) {
+    return 0
+  }
+
+  unlockAudio()
+  const start = context.currentTime + 0.12
+  const beat = 0.46
+
+  // a shared delay so the notes bloom with a little space
+  const delay = context.createDelay(1)
+  delay.delayTime.setValueAtTime(0.29, start)
+  const feedback = context.createGain()
+  feedback.gain.setValueAtTime(0.3, start)
+  const delayOut = context.createGain()
+  delayOut.gain.setValueAtTime(0.45, start)
+  delay.connect(feedback)
+  feedback.connect(delay)
+  delay.connect(delayOut)
+  delayOut.connect(context.destination)
+
+  const piano = (frequency: number, at: number, duration: number, volume = 0.06) => {
+    const osc = context.createOscillator()
+    osc.type = 'triangle'
+    osc.frequency.setValueAtTime(frequency, at)
+    const overtone = context.createOscillator()
+    overtone.type = 'sine'
+    overtone.frequency.setValueAtTime(frequency * 2, at)
+    const overtoneGain = context.createGain()
+    overtoneGain.gain.setValueAtTime(0.28, at)
+
+    const gain = context.createGain()
+    gain.gain.setValueAtTime(0.0001, at)
+    gain.gain.exponentialRampToValueAtTime(volume, at + 0.012)
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+
+    osc.connect(gain)
+    overtone.connect(overtoneGain)
+    overtoneGain.connect(gain)
+    gain.connect(context.destination)
+    gain.connect(delay)
+    osc.start(at)
+    overtone.start(at)
+    osc.stop(at + duration + 0.05)
+    overtone.stop(at + duration + 0.05)
+  }
+
+  const N = {
+    C3: 130.81, F3: 174.61, G3: 196, A3: 220,
+    C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88,
+    C5: 523.25, D5: 587.33, E5: 659.25,
+  }
+
+  const melody: Array<[number, number, number]> = [
+    [N.E4, 0, 1.5], [N.G4, 1.5, 0.5], [N.C5, 2, 2], [N.B4, 4, 1], [N.A4, 5, 1.5], [N.G4, 6.5, 0.5], [N.E4, 7, 2],
+    [N.D4, 9, 1], [N.F4, 10, 1], [N.A4, 11, 1], [N.G4, 12, 3],
+    [N.C5, 15, 1], [N.D5, 16, 1], [N.E5, 17, 3],
+  ]
+  melody.forEach(([frequency, b, d]) => piano(frequency, start + b * beat, d * beat))
+
+  const bass: Array<[number, number, number]> = [
+    [N.C3, 0, 3.5], [N.A3, 4, 3], [N.F3, 9, 3], [N.G3, 12, 3], [N.C3, 15, 5],
+  ]
+  bass.forEach(([frequency, b, d]) => piano(frequency, start + b * beat, d * beat, 0.03))
+
+  return 21 * beat * 1000
+}
+
 // A quick ascending sparkle used when the drive collects a star fragment.
 export function playPickup(step = 0) {
   const context = getContext()

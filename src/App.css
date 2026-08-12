@@ -182,8 +182,12 @@
 .garden-menu {
   position: relative;
   pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
+.hud-icon-button,
 .menu-toggle {
   width: 2.9rem;
   height: 2.9rem;
@@ -201,7 +205,17 @@
   transition: transform 0.12s ease, background 0.15s ease;
 }
 
-.menu-toggle:active {
+.hud-icon-button {
+  font-size: 1.2rem;
+}
+
+.hud-icon-button:hover {
+  background: rgba(255, 235, 196, 0.2);
+  border-color: rgba(255, 226, 170, 0.4);
+}
+
+.menu-toggle:active,
+.hud-icon-button:active {
   transform: scale(0.93);
 }
 
@@ -1693,15 +1707,28 @@
   backdrop-filter: blur(8px);
 }
 
+.compass-hud {
+  animation: compassPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes compassPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(255, 226, 170, 0);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(255, 226, 170, 0.28);
+  }
+}
+
 .compass-arrow {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.35rem;
+  height: 1.35rem;
   transform-origin: 50% 50%;
-  filter: drop-shadow(0 0 6px rgba(255, 226, 170, 0.6));
+  filter: drop-shadow(0 0 7px rgba(255, 226, 170, 0.7));
 }
 
 .compass-label {
-  font-size: 0.8rem;
+  font-size: 0.84rem;
   letter-spacing: 0.04em;
   color: #fff2cf;
   white-space: nowrap;
