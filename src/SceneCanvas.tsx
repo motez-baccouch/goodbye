@@ -767,6 +767,8 @@ function SceneCanvas() {
   const [pianoPlaying, setPianoPlaying] = useState(false)
   const [secretEnding, setSecretEnding] = useState(false)
   const [climb, setClimb] = useState<'none' | 'up' | 'top' | 'down'>('none')
+  const [scoping, setScoping] = useState(false)
+  const [wishNonce, setWishNonce] = useState(0)
   const [detailMessage, setDetailMessage] = useState('')
   const [hintIndex, setHintIndex] = useState(0)
   const [hintVisible, setHintVisible] = useState(false)
@@ -1013,6 +1015,23 @@ function SceneCanvas() {
     setDetailMessage(message)
     setSecretsFound((current) => (current.includes(secret) ? current : [...current, secret]))
     revealSecretCard(secret)
+  }
+
+  const handleWish = () => {
+    const wishes = [
+      'Wish granted: an infinite supply of pain au chocolat. 🥐',
+      'May your French boss be nicer than the last one. (Low bar.)',
+      "That one's for you. Don't tell ENSI we made a wish without a permission slip.",
+      "Bon courage — and it's 'pain au chocolat', never 'chocolatine'. Pick your battles.",
+      'Sacré bleu, a wish! Spend it wisely. Or on cheese.',
+      "Go be brilliant. Try not to say 'omelette du fromage' to actual French people.",
+      'May the metro always be on time. (Okay — that one won’t come true.)',
+    ]
+    const wish = wishes[Math.floor(Math.random() * wishes.length)]
+    playTone('secret')
+    haptic(16)
+    setDetailMessage(wish)
+    setWishNonce((current) => current + 1)
   }
 
   const handleSecretTap = (secret: SecretId) => {
@@ -1494,14 +1513,19 @@ function SceneCanvas() {
           inputBlocked={controlsBlocked}
           seat={seat}
           climb={climb}
+          scope={scoping}
           onClimbTop={() => {
             setClimb('top')
             playTone('lantern')
             haptic(18)
           }}
-          onClimbLeaveTop={() => setClimb('up')}
+          onClimbLeaveTop={() => {
+            setClimb('up')
+            setScoping(false)
+          }}
           onClimbBottom={() => {
             setClimb('none')
+            setScoping(false)
             setDetailMessage('Back on the ground. The lighthouse keeps watch.')
           }}
           onSample={(sample) => {
@@ -1517,6 +1541,10 @@ function SceneCanvas() {
         </Suspense>
         <SkyConstellations />
         <AuroraBorealis />
+        <Petals count={deviceProfile.mobile ? 55 : 110} />
+        <MoonPond />
+        <BannerPlane />
+        <WishingStars burstNonce={wishNonce} />
         <NouraConstellation visible={secretEnding} />
         <Comet nonce={cometNonce} />
         <ShootingStars />
@@ -1543,7 +1571,7 @@ function SceneCanvas() {
           fleeNonce={padelFleeNonce}
           onFlee={handlePadelFlee}
         />
-        <TapRaycaster nonce={tapNonce} pointRef={tapPointRef} onHit={handleSecretTap} />
+        <TapRaycaster nonce={tapNonce} pointRef={tapPointRef} onHit={handleSecretTap} onWish={handleWish} />
         <GardenGate open={gateOpen} highlighted={interactable?.id === 'gate'} />
         <RoseCabinet progress={archiveCount} complete={archiveOpened.every(Boolean)} highlighted={interactable?.id === 'archive'} />
         <LanternGrove progress={lanternCount} complete={lanternsLit.every(Boolean)} highlighted={interactable?.id === 'lanterns'} />
@@ -1682,12 +1710,33 @@ function SceneCanvas() {
       {climb === 'top' ? (
         <div className="climb-hud">
           <p className="climb-message">
-            The aurora over the whole moonlit garden — worth every step. Take it in, look around.
-            (Somewhere down there, that padel ball is still running from you.)
+            {scoping
+              ? "Paris, right there on the horizon. Try not to say 'omelette du fromage' to actual French people. 🥖"
+              : 'The aurora over the whole moonlit garden — worth every step. Look around. (Somewhere down there, that padel ball is still running from you.)'}
           </p>
-          <button type="button" className="interact-button" onClick={() => setClimb('down')}>
-            Descend
-          </button>
+          <div className="climb-buttons">
+            <button
+              type="button"
+              className="interact-button"
+              onClick={() => {
+                playTone(scoping ? 'focus' : 'secret')
+                haptic(12)
+                setScoping((current) => !current)
+              }}
+            >
+              {scoping ? 'Lower telescope' : '🔭 Look toward Paris'}
+            </button>
+            <button
+              type="button"
+              className="interact-button"
+              onClick={() => {
+                setScoping(false)
+                setClimb('down')
+              }}
+            >
+              Descend
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -1849,9 +1898,9 @@ function SceneCanvas() {
                   }}
                 >
                   <p className="overlay-kicker">For Nour</p>
-                  <h1>The Light She Left Behind</h1>
+                  <h1>Nour's Grand Départ</h1>
                   <p className="intro-script">
-                    Un jardin de souvenirs, de lettres anciennes, et d'un peu de lumiere.
+                    Un jardin de souvenirs, de blagues douteuses, et d'un très gros au revoir.
                   </p>
                   <p>
                     Collect every keepsake. The last letter will arrive from the sky.
@@ -1875,7 +1924,7 @@ function SceneCanvas() {
             ) : overlayMode === 'help' ? (
               <>
                 <p className="overlay-kicker">Guide</p>
-                <h1>The Light She Left Behind</h1>
+                <h1>Nour's Grand Départ</h1>
                 <p>
                   Walk through the moonlit garden, stop by each landmark, and use Interact to open the
                   next memory note.
@@ -2116,6 +2165,7 @@ function FirstPersonRig({
   inputBlocked,
   seat,
   climb,
+  scope,
   onClimbTop,
   onClimbLeaveTop,
   onClimbBottom,
@@ -2128,6 +2178,7 @@ function FirstPersonRig({
   inputBlocked: boolean
   seat: BenchSeat | null
   climb: 'none' | 'up' | 'top' | 'down'
+  scope: boolean
   onClimbTop: () => void
   onClimbLeaveTop: () => void
   onClimbBottom: () => void
@@ -2141,6 +2192,9 @@ function FirstPersonRig({
   const strideRef = useRef(0)
   const climbTRef = useRef(0)
   const climbRef = useRef<'none' | 'up' | 'top' | 'down'>('none')
+  const scopeRef = useRef(false)
+  const fovBaseRef = useRef(0)
+  const perspRef = useRef<THREE.PerspectiveCamera | null>(null)
   const keysRef = useRef({ forward: false, back: false, left: false, right: false })
 
   useEffect(() => {
@@ -2184,6 +2238,20 @@ function FirstPersonRig({
   }, [seat])
 
   useEffect(() => {
+    scopeRef.current = scope
+  }, [scope])
+
+  useEffect(() => {
+    // hold the perspective camera in a ref so the telescope can adjust its FOV
+    // in the frame loop (mutating a ref-held object is allowed by the compiler)
+    const persp = camera as THREE.PerspectiveCamera
+    perspRef.current = persp
+    if (fovBaseRef.current === 0) {
+      fovBaseRef.current = persp.fov
+    }
+  }, [camera])
+
+  useEffect(() => {
     climbRef.current = climb
     // starting a fresh climb from the ground: lift a hair off zero so the exit
     // check doesn't fire instantly, and face out over the moonlit garden
@@ -2208,8 +2276,10 @@ function FirstPersonRig({
       lookRef.current.dx = 0
       lookRef.current.dy = 0
 
+      const scoping = climbNow === 'top' && scopeRef.current
       const keyY = (keysRef.current.forward ? 1 : 0) - (keysRef.current.back ? 1 : 0)
-      const climbInput = clamp(movementRef.current.y + keyY, -1, 1)
+      // freeze the player in place while looking through the telescope
+      const climbInput = scoping ? 0 : clamp(movementRef.current.y + keyY, -1, 1)
 
       if (climbNow === 'down') {
         // the Descend button: glide smoothly all the way back to the ground
@@ -2228,13 +2298,28 @@ function FirstPersonRig({
       // a gentle step-bob only while actively moving up or down the stairs
       const bob = Math.sin(clock.elapsedTime * 7) * Math.abs(climbInput) * 0.03
 
-      const direction = tmpDirection.set(
-        Math.sin(yawRef.current) * Math.cos(pitchRef.current),
-        Math.sin(pitchRef.current),
-        -Math.cos(yawRef.current) * Math.cos(pitchRef.current),
-      )
-      camera.position.set(cx, 1.5 + height + bob, cz)
-      camera.lookAt(tmpLookTarget.copy(camera.position).add(direction))
+      const persp = perspRef.current
+      if (scoping) {
+        // telescope: zoom in and aim at the low-poly Eiffel on the horizon
+        if (persp) {
+          persp.fov = THREE.MathUtils.damp(persp.fov, 26, 3.5, delta)
+          persp.updateProjectionMatrix()
+        }
+        camera.position.set(cx, 1.5 + height, cz)
+        camera.lookAt(-15, 7, -66)
+      } else {
+        if (persp && Math.abs(persp.fov - fovBaseRef.current) > 0.05) {
+          persp.fov = THREE.MathUtils.damp(persp.fov, fovBaseRef.current, 4, delta)
+          persp.updateProjectionMatrix()
+        }
+        const direction = tmpDirection.set(
+          Math.sin(yawRef.current) * Math.cos(pitchRef.current),
+          Math.sin(pitchRef.current),
+          -Math.cos(yawRef.current) * Math.cos(pitchRef.current),
+        )
+        camera.position.set(cx, 1.5 + height + bob, cz)
+        camera.lookAt(tmpLookTarget.copy(camera.position).add(direction))
+      }
 
       if (t <= 0.004 && (climbNow === 'down' || climbInput < 0)) {
         // stepped back down to the ground: hand control back on the base landing
@@ -2318,6 +2403,7 @@ function FirstPersonRig({
       { x: 0, z: -46, radius: 1.35 },
       { x: -5, z: -0.5, radius: 1.1 },
       { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 2.6 },
+      { x: POND_POS[0], z: POND_POS[2], radius: POND_RADIUS + 0.4 },
     ]
 
     colliders.forEach((collider) => {
@@ -3345,6 +3431,268 @@ function AuroraBorealis() {
     <group>
       <AuroraCurtain position={[-8, 26, -72]} rotation={[0.1, 0.14, 0.03]} seed={0.4} width={120} />
       <AuroraCurtain position={[16, 30, -82]} rotation={[0.14, -0.2, -0.05]} seed={2.3} width={140} />
+    </group>
+  )
+}
+
+// Drifting blossom petals across the whole garden — instanced quads that fall,
+// sway, tumble, and recycle to the top. One draw call; cheap enough for iPhone.
+function Petals({ count }: { count: number }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null)
+  const dummy = useMemo(() => new THREE.Object3D(), [])
+  const petalsRef = useRef<
+    Array<{
+      x: number
+      y: number
+      z: number
+      vy: number
+      sway: number
+      phase: number
+      rot: number
+      rotSpeed: number
+      scale: number
+    }>
+  >([])
+
+  useEffect(() => {
+    const arr = []
+    for (let i = 0; i < count; i += 1) {
+      arr.push({
+        x: (Math.random() - 0.5) * 46,
+        y: Math.random() * 18,
+        z: -6 - Math.random() * 46,
+        vy: 0.35 + Math.random() * 0.5,
+        sway: 0.4 + Math.random() * 1.3,
+        phase: Math.random() * Math.PI * 2,
+        rot: Math.random() * Math.PI,
+        rotSpeed: (Math.random() - 0.5) * 1.6,
+        scale: 0.09 + Math.random() * 0.13,
+      })
+    }
+    petalsRef.current = arr
+  }, [count])
+
+  useFrame((state, delta) => {
+    const mesh = meshRef.current
+    if (!mesh) {
+      return
+    }
+    const t = state.clock.elapsedTime
+    const arr = petalsRef.current
+    for (let i = 0; i < arr.length; i += 1) {
+      const p = arr[i]
+      p.y -= p.vy * delta
+      p.rot += p.rotSpeed * delta
+      if (p.y < 0.06) {
+        p.y += 18 // recycle to the top, no per-frame randomness
+      }
+      const sx = p.x + Math.sin(t * 0.8 + p.phase) * p.sway
+      const sz = p.z + Math.cos(t * 0.6 + p.phase) * p.sway * 0.5
+      dummy.position.set(sx, p.y, sz)
+      dummy.rotation.set(p.rot * 0.6, p.rot, p.rot * 0.3)
+      dummy.scale.setScalar(p.scale)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    }
+    mesh.instanceMatrix.needsUpdate = true
+  })
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial color="#ffd3e4" transparent opacity={0.82} side={THREE.DoubleSide} depthWrite={false} />
+    </instancedMesh>
+  )
+}
+
+// A still reflecting pond on the open east flank — a hand-written water shader:
+// deep teal base, a wobbling moon streak, ripple rings and a faint aurora-green
+// shimmer. Sits flat on the ground with a low stone rim.
+const POND_POS: Vec3 = [16.5, 0.03, -20]
+const POND_RADIUS = 3.8
+
+const POND_VERT = `
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  void main() {
+    vUv = uv;
+    vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+
+const POND_FRAG = `
+  precision mediump float;
+  uniform float uTime;
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  void main() {
+    vec2 p = vUv * 2.0 - 1.0;
+    float r = length(p);
+    vec3 col = mix(vec3(0.05, 0.12, 0.16), vec3(0.02, 0.05, 0.09), r);
+    // wobbling vertical moon reflection
+    float streak = p.x + sin(vWorld.z * 1.5 + uTime * 0.8) * 0.04 + sin(vWorld.x * 3.0 + uTime) * 0.02;
+    float moon = exp(-pow(streak * 6.0, 2.0)) * smoothstep(1.0, 0.0, r);
+    float ripple = 0.5 + 0.5 * sin(r * 26.0 - uTime * 2.0);
+    moon *= 0.6 + 0.4 * ripple;
+    col += vec3(0.92, 0.94, 0.82) * moon * 0.9;
+    // faint aurora-green shimmer
+    float aur = (0.5 + 0.5 * sin(vWorld.x * 0.5 + uTime * 0.6)) * smoothstep(0.85, 0.0, r) * 0.16;
+    col += vec3(0.1, 0.5, 0.35) * aur;
+    float edge = smoothstep(1.0, 0.86, r);
+    gl_FragColor = vec4(col, edge * 0.94);
+  }
+`
+
+function MoonPond() {
+  const materialRef = useRef<THREE.ShaderMaterial>(null)
+  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), [])
+
+  useFrame(({ clock }) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.uTime.value = clock.elapsedTime
+    }
+  })
+
+  return (
+    <group position={POND_POS}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[POND_RADIUS, 48]} />
+        <shaderMaterial
+          ref={materialRef}
+          transparent
+          depthWrite={false}
+          uniforms={uniforms}
+          vertexShader={POND_VERT}
+          fragmentShader={POND_FRAG}
+        />
+      </mesh>
+      {/* low stone rim */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
+        <ringGeometry args={[POND_RADIUS, POND_RADIUS + 0.5, 48]} />
+        <meshStandardMaterial color="#3a4150" roughness={0.9} />
+      </mesh>
+    </group>
+  )
+}
+
+// A slow wishing star that drifts across the northern sky. Tap it (its generous
+// invisible hitbox) to make a wish; it bursts, rests, then returns.
+function WishingStars({ burstNonce }: { burstNonce: number }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const tRef = useRef(0.12)
+  const stateRef = useRef<'run' | 'wait'>('run')
+  const waitRef = useRef(0)
+
+  useEffect(() => {
+    if (burstNonce === 0) {
+      return
+    }
+    stateRef.current = 'wait'
+    waitRef.current = 7
+  }, [burstNonce])
+
+  useFrame((_, delta) => {
+    const g = groupRef.current
+    if (!g) {
+      return
+    }
+    if (stateRef.current === 'wait') {
+      g.visible = false
+      waitRef.current -= delta
+      if (waitRef.current <= 0) {
+        stateRef.current = 'run'
+        tRef.current = 0
+      }
+      return
+    }
+    g.visible = true
+    tRef.current += delta * 0.05
+    const t = tRef.current
+    if (t >= 1) {
+      stateRef.current = 'wait'
+      waitRef.current = 9
+      return
+    }
+    g.position.set(THREE.MathUtils.lerp(-26, 26, t), 19 + Math.sin(t * Math.PI) * 7, -48)
+  })
+
+  return (
+    <group ref={groupRef} visible={false}>
+      <mesh userData={{ wish: true }}>
+        <sphereGeometry args={[3.2, 8, 8]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[0.3, 12, 12]} />
+        <meshBasicMaterial color="#fff3c8" />
+      </mesh>
+      <LampGlow position={[0, 0, 0]} scale={3} color="#ffe9a8" opacity={0.5} />
+    </group>
+  )
+}
+
+// A little low-poly plane that periodically tows a "BON VOYAGE NOUR" banner
+// across the far sky. Silhouetted against the aurora.
+function BannerPlane() {
+  const groupRef = useRef<THREE.Group>(null)
+  const tRef = useRef(0)
+  const bannerTex = useMemo(() => {
+    const canvas = createTextureCanvas(1024, 256)
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.fillStyle = 'rgba(20, 16, 30, 0.85)'
+      ctx.fillRect(0, 0, 1024, 256)
+      ctx.strokeStyle = '#ffd98a'
+      ctx.lineWidth = 8
+      ctx.strokeRect(10, 10, 1004, 236)
+      ctx.fillStyle = '#ffe9a8'
+      ctx.font = 'bold 116px Georgia, serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('BON VOYAGE NOUR ✦', 512, 138)
+    }
+    return new THREE.CanvasTexture(canvas)
+  }, [])
+
+  useFrame((_, delta) => {
+    const g = groupRef.current
+    if (!g) {
+      return
+    }
+    tRef.current += delta
+    const phase = (tRef.current % 40) / 12 // ~12s crossing, then hidden until the cycle repeats
+    if (phase > 1) {
+      g.visible = false
+      return
+    }
+    g.visible = true
+    g.position.set(THREE.MathUtils.lerp(-46, 46, phase), 24 + Math.sin(phase * Math.PI) * 2.5, -50)
+  })
+
+  return (
+    <group ref={groupRef} visible={false}>
+      <mesh>
+        <boxGeometry args={[2.2, 0.5, 0.5]} />
+        <meshStandardMaterial color="#ece6d4" emissive="#332b1a" emissiveIntensity={0.35} />
+      </mesh>
+      <mesh>
+        <boxGeometry args={[0.6, 0.1, 3.4]} />
+        <meshStandardMaterial color="#d9d2bd" />
+      </mesh>
+      <mesh position={[-1.0, 0.35, 0]}>
+        <boxGeometry args={[0.4, 0.6, 0.1]} />
+        <meshStandardMaterial color="#d9d2bd" />
+      </mesh>
+      <mesh position={[-2.0, 0, 0]}>
+        <boxGeometry args={[1.6, 0.03, 0.03]} />
+        <meshBasicMaterial color="#ffe9a8" />
+      </mesh>
+      <mesh position={[-4.3, 0, 0]}>
+        <planeGeometry args={[5.4, 1.35]} />
+        <meshBasicMaterial map={bannerTex} transparent side={THREE.DoubleSide} />
+      </mesh>
+      <pointLight position={[0, 0, 0]} intensity={3} distance={9} color="#ffe9c0" />
     </group>
   )
 }
@@ -4443,10 +4791,12 @@ function TapRaycaster({
   nonce,
   pointRef,
   onHit,
+  onWish,
 }: {
   nonce: number
   pointRef: React.MutableRefObject<{ x: number; y: number } | null>
   onHit: (secret: SecretId) => void
+  onWish: () => void
 }) {
   const { camera, scene, gl } = useThree()
   const handledRef = useRef(0)
@@ -4473,7 +4823,7 @@ function TapRaycaster({
 
     const targets: THREE.Object3D[] = []
     scene.traverse((object) => {
-      if (object.userData.secret) {
+      if (object.visible && (object.userData.secret || object.userData.wish)) {
         targets.push(object)
       }
     })
@@ -4487,6 +4837,11 @@ function TapRaycaster({
     let object: THREE.Object3D | null = hits[0].object
 
     while (object) {
+      if (object.userData.wish) {
+        onWish()
+        return
+      }
+
       if (object.userData.secret) {
         onHit(object.userData.secret as SecretId)
         return
@@ -4494,7 +4849,7 @@ function TapRaycaster({
 
       object = object.parent
     }
-  }, [nonce, camera, scene, gl, pointRef, onHit])
+  }, [nonce, camera, scene, gl, pointRef, onHit, onWish])
 
   return null
 }

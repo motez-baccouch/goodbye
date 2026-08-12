@@ -2020,6 +2020,13 @@
   pointer-events: auto;
 }
 
+.climb-buttons {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .climb-message {
   margin: 0;
   text-align: center;
