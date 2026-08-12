@@ -526,6 +526,7 @@ const preloadedModels = [
   'flower_purpleB.glb',
   'flower_yellowC.glb',
   'grass_leafs.glb',
+  'sakura.glb',
   'tableRound.glb',
   'food/cup-tea.glb',
   'food/plate.glb',
@@ -1580,7 +1581,15 @@ function SceneCanvas() {
         <ShootingStars />
         <Fireworks active={forceFireworks || secretEnding || (finalOpen && !letterVisible && !creditsVisible && !epilogue)} />
         <FranceConstellation visible={finalOpen} />
-        <EiffelTower position={[-15.5, 0, -64]} scale={1.35} />
+        <SafeModel
+          file="eiffel.glb"
+          position={[-15.5, 0, -64]}
+          scale={0.2}
+          rotationY={0.35}
+          tint="stone"
+          fallback={<EiffelTower position={[-15.5, 0, -64]} scale={1.35} />}
+        />
+        <SakuraTrees />
         <Lighthouse />
         <PetanqueCourt highlighted={interactable?.id === 'petanque'} />
         <CafeCart highlighted={interactable?.id === 'cafe'} />
@@ -2369,7 +2378,7 @@ function FirstPersonRig({
           persp.updateProjectionMatrix()
         }
         camera.position.set(cx, eyeY, cz)
-        camera.lookAt(-15, 7, -66)
+        camera.lookAt(-15.5, 9, -64)
       } else {
         if (persp && Math.abs(persp.fov - fovBaseRef.current) > 0.05) {
           persp.fov = THREE.MathUtils.damp(persp.fov, fovBaseRef.current, 4, delta)
@@ -4619,6 +4628,26 @@ function GardenTrees() {
           scale={tree.scale}
           rotationY={tree.rotationY}
         />
+      ))}
+    </group>
+  )
+}
+
+// Feature cherry-blossom trees (imported low-poly sakura) at scenic spots.
+const sakuraTrees: Array<{ position: Vec3; scale: number; rotationY: number }> = [
+  { position: [-8.5, 0, 3.6], scale: 1.5, rotationY: 0.4 },
+  { position: [8.5, 0, 3.6], scale: 1.4, rotationY: 2.3 },
+  { position: [-19, 0, -30], scale: 1.6, rotationY: 1.1 },
+  { position: [19, 0, -30], scale: 1.5, rotationY: 4.0 },
+  { position: [-25, 0, -40], scale: 1.4, rotationY: 2.7 },
+  { position: [0, 0, -55], scale: 1.8, rotationY: 5.2 },
+]
+
+function SakuraTrees() {
+  return (
+    <group>
+      {sakuraTrees.map((tree, index) => (
+        <SafeModel key={index} file="sakura.glb" position={tree.position} scale={tree.scale} rotationY={tree.rotationY} tint="flower" />
       ))}
     </group>
   )
