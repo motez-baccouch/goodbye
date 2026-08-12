@@ -1962,14 +1962,11 @@ function SceneCanvas() {
             <p className="credits-line credits-script" style={{ animationDelay: '6.2s' }}>
               Break a leg in France.
             </p>
-            <p className="credits-line credits-script" style={{ animationDelay: '8s' }}>
-              From Hassen &amp; me, always.
-            </p>
-            <p className="credits-line credits-carlos" style={{ animationDelay: '9.4s' }}>go carlos ✦</p>
+            <p className="credits-line credits-carlos" style={{ animationDelay: '8s' }}>go carlos ✦</p>
             <button
               type="button"
               className="credits-return"
-              style={{ animationDelay: '11s' }}
+              style={{ animationDelay: '9.6s' }}
               onClick={() => {
                 setCreditsVisible(false)
                 setEpilogue(true)

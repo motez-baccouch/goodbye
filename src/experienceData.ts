@@ -203,11 +203,10 @@ export const chapters: Chapter[] = [
 
 export const finalLetter = [
   'Noura,',
-  'Working alongside you has been one of the brightest parts of this chapter, for both of us.',
+  'Working alongside you has been one of the brightest parts of this chapter.',
   'You brought cheer, talent, warmth, and that rare kind of presence that makes even ordinary days feel lighter.',
-  'Hassen and I are truly happy that we got to work with someone like you, and honestly, we do not think we will ever have a better friend and partner.',
+  'I am truly happy that I got to work with someone like you, and honestly, I do not think I will ever have a better friend and partner.',
   'Thank you for the laughs, the memories, the inside jokes, and for making this place feel more alive than it would have without you.',
-  'We wish you nothing but the best in France. Break a leg, keep shining, and please do not forget the classics.',
+  'I wish you nothing but the best in France. Break a leg, keep shining, and please do not forget the classics.',
   'Go carlos.',
-  '— Hassen & me, always',
 ]
