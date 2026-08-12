@@ -616,7 +616,7 @@ function getNearbyInteractable(player: PlayerSample, gateOpen: boolean): Interac
     { id: 'reading', radius: 3.4 },
     { id: 'final', radius: 3.6 },
     { id: 'piano', radius: 3 },
-    { id: 'lighthouse', radius: 6.5 },
+    { id: 'lighthouse', radius: 4 },
     { id: 'petanque', radius: 3.4 },
     { id: 'cafe', radius: 3.4 },
   ]
@@ -1583,18 +1583,29 @@ function SceneCanvas() {
         <ShootingStars />
         <Fireworks active={forceFireworks || secretEnding || (finalOpen && !letterVisible && !creditsVisible && !epilogue)} />
         <FranceConstellation visible={finalOpen} />
-        <SafeModel
-          file="eiffel.glb"
-          position={[-15.5, 0, -64]}
-          scale={0.2}
-          rotationY={0.35}
-          tint="stone"
-          fallback={<EiffelTower position={[-15.5, 0, -64]} scale={1.35} />}
-        />
+        <group>
+          {/* far-horizon Eiffel, out past the village, lit up golden at night */}
+          <SafeModel
+            file="eiffel.glb"
+            position={[-15.5, 0, -74]}
+            scale={0.2}
+            rotationY={0.35}
+            tint="stone"
+            fallback={<EiffelTower position={[-15.5, 0, -74]} scale={1.35} />}
+          />
+          <pointLight position={[-15.5, 4, -74]} intensity={12} distance={24} color="#ffcf8a" />
+          <pointLight position={[-15.5, 14, -74]} intensity={8} distance={20} color="#ffdca0" />
+          <LampGlow position={[-15.5, 22, -74]} scale={4.5} color="#ffe9a8" opacity={0.5} />
+          <mesh position={[-15.5, 24.5, -74]}>
+            <sphereGeometry args={[0.28, 12, 12]} />
+            <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={2.4} toneMapped={false} fog={false} />
+          </mesh>
+        </group>
         <SakuraTrees />
         <GardenLamps />
-        <SafeModel file="fountain.glb" position={[14, 0, -10]} scale={0.55} rotationY={0.4} tint="stone" />
+        <SafeModel file="fountain.glb" position={[20, 0, -12]} scale={0.55} rotationY={0.4} tint="stone" />
         <Lighthouse />
+        <FarLighthouse />
         <PetanqueCourt highlighted={interactable?.id === 'petanque'} />
         <CafeCart highlighted={interactable?.id === 'cafe'} />
         <SecretHitbox secret="boss" position={[0, 1.9, -46]} radius={1.9} />
@@ -1748,7 +1759,7 @@ function SceneCanvas() {
 
       {climb === 'up' || climb === 'down' ? (
         <div className="climb-hint">
-          <p>Hold ▲ to rise up the lighthouse · hold ▼ to come back down</p>
+          <p>Hold ▲ to climb the stairs · hold ▼ to come back down</p>
         </div>
       ) : null}
 
@@ -1757,7 +1768,7 @@ function SceneCanvas() {
           <p className="climb-message">
             {scoping
               ? "Paris, right there on the horizon. Try not to say 'omelette du fromage' to actual French people. 🥖"
-              : 'The aurora over the whole moonlit garden. Drag to look around, strafe to orbit the tower — then hold back to come down.'}
+              : 'The aurora over the whole moonlit garden — worth every step. Look around, then just walk back down the stairs when you’re ready.'}
           </p>
           <div className="climb-buttons">
             <button
@@ -2254,7 +2265,6 @@ function FirstPersonRig({
   const sampleTimeRef = useRef(0)
   const strideRef = useRef(0)
   const climbTRef = useRef(0)
-  const orbitRef = useRef(0)
   const climbRef = useRef<'none' | 'up' | 'top' | 'down'>('none')
   const scopeRef = useRef(false)
   const fovBaseRef = useRef(0)
@@ -2321,9 +2331,9 @@ function FirstPersonRig({
     // check doesn't fire instantly, and face out over the moonlit garden
     if (climb === 'up' && climbTRef.current < 0.03) {
       climbTRef.current = 0.02
-      orbitRef.current = 0
-      yawRef.current = Math.atan2(0 - LIGHTHOUSE_POS[0], -(-8 - LIGHTHOUSE_POS[2]))
-      pitchRef.current = 0.02
+      const startAngle = 0.02 * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
+      yawRef.current = startAngle + Math.PI
+      pitchRef.current = 0.0
     }
   }, [climb])
 
@@ -2333,47 +2343,56 @@ function FirstPersonRig({
     // look the whole way up, so they discover the view themselves.
     const climbNow = climbRef.current
     if (climbNow !== 'none') {
-      // guided rise: hold forward to lift up beside the tower, back to come down.
-      // Free look throughout; at the top, strafe (left/right) orbits the tower so
-      // you can explore the view from every side.
+      // manual climb: hold forward to walk UP the outer stairs, back to descend.
+      // The camera steers itself up the spiral (forward always = upward), then
+      // eases onto the gallery walkway at the very top for the view.
       const scoping = climbNow === 'top' && scopeRef.current
       const keyY = (keysRef.current.forward ? 1 : 0) - (keysRef.current.back ? 1 : 0)
-      const keyX = (keysRef.current.right ? 1 : 0) - (keysRef.current.left ? 1 : 0)
       const climbInput = scoping ? 0 : clamp(movementRef.current.y + keyY, -1, 1)
-      const strafe = scoping ? 0 : clamp(movementRef.current.x + keyX, -1, 1)
 
       if (climbNow === 'down') {
         climbTRef.current = THREE.MathUtils.damp(climbTRef.current, 0, 2.6, delta)
       } else {
-        climbTRef.current = clamp(climbTRef.current + climbInput * delta * 0.22, 0, 1)
+        climbTRef.current = clamp(climbTRef.current + climbInput * delta * 0.2, 0, 1)
       }
 
       const t = climbTRef.current
-      const top = clamp((t - 0.9) / 0.1, 0, 1)
-      // orbit the top only once you're up there
-      orbitRef.current += strafe * delta * 0.7 * top
+      const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
+      const gallery = clamp((t - 0.9) / 0.1, 0, 1)
 
-      // free look the whole way
+      // look: vertical drag always tilts; horizontal free-look only once you're
+      // up on the gallery (during the climb the camera follows the stairs)
       pitchRef.current = clamp(pitchRef.current - lookRef.current.dy * 0.0022, -0.6, 0.6)
-      yawRef.current += lookRef.current.dx * 0.0032
+      if (gallery > 0.5) {
+        yawRef.current += lookRef.current.dx * 0.0032
+      }
       lookRef.current.dx = 0
       lookRef.current.dy = 0
 
-      // a gentle quarter-turn as you rise, plus your own orbit at the top
-      const angle = LIGHTHOUSE_START_ANGLE + t * 0.35 * Math.PI * 2 + orbitRef.current
-      const cx = LIGHTHOUSE_POS[0] + Math.cos(angle) * LIGHTHOUSE_RISE_RADIUS
-      const cz = LIGHTHOUSE_POS[2] + Math.sin(angle) * LIGHTHOUSE_RISE_RADIUS
-      const eyeY = THREE.MathUtils.lerp(1.5, LIGHTHOUSE_RISE_TOP, t)
+      if (gallery < 0.5) {
+        // gently steer to face up the spiral so "forward" reads as climbing
+        const tangentYaw = angle + Math.PI
+        let dyaw = tangentYaw - yawRef.current
+        dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw))
+        yawRef.current += dyaw * Math.min(1, delta * 4)
+      }
+
+      const height = t * LIGHTHOUSE_TOP
+      const camRadius = THREE.MathUtils.lerp(LIGHTHOUSE_STAIR_RADIUS, 1.85, gallery)
+      const cx = LIGHTHOUSE_POS[0] + Math.cos(angle) * camRadius
+      const cz = LIGHTHOUSE_POS[2] + Math.sin(angle) * camRadius
+      const eyeY = THREE.MathUtils.lerp(1.5 + height, LIGHTHOUSE_TOP + 2.0, gallery)
+      const bob = Math.sin(clock.elapsedTime * 7) * Math.abs(climbInput) * 0.03 * (1 - gallery)
 
       const persp = perspRef.current
       if (scoping) {
-        // telescope: zoom in and aim at the Eiffel on the horizon
+        // telescope: zoom in and aim at the Eiffel on the far horizon
         if (persp) {
           persp.fov = THREE.MathUtils.damp(persp.fov, 26, 3.5, delta)
           persp.updateProjectionMatrix()
         }
         camera.position.set(cx, eyeY, cz)
-        camera.lookAt(-15.5, 9, -64)
+        camera.lookAt(-15.5, 12, -72)
       } else {
         if (persp && Math.abs(persp.fov - fovBaseRef.current) > 0.05) {
           persp.fov = THREE.MathUtils.damp(persp.fov, fovBaseRef.current, 4, delta)
@@ -2384,13 +2403,13 @@ function FirstPersonRig({
           Math.sin(pitchRef.current),
           -Math.cos(yawRef.current) * Math.cos(pitchRef.current),
         )
-        camera.position.set(cx, eyeY, cz)
+        camera.position.set(cx, eyeY + bob, cz)
         camera.lookAt(tmpLookTarget.copy(camera.position).add(direction))
       }
 
       if (t <= 0.004 && (climbNow === 'down' || climbInput < 0)) {
-        // back on the ground: hand control back on the garden-side landing
-        positionRef.current.set(LIGHTHOUSE_POS[0] + 5.7, 1.55, LIGHTHOUSE_POS[2] + 2.4)
+        // stepped back down to the ground: hand control back on the base landing
+        positionRef.current.set(LIGHTHOUSE_POS[0] + 2.9, 1.55, LIGHTHOUSE_POS[2] + 2.9)
         onClimbBottom()
         return
       }
@@ -2469,10 +2488,10 @@ function FirstPersonRig({
       { x: 0, z: -2, radius: 1.2 },
       { x: 0, z: -46, radius: 1.35 },
       { x: -5, z: -0.5, radius: 1.1 },
-      { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 4.2 },
+      { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 3.3 },
       { x: POND_POS[0], z: POND_POS[2], radius: POND_RADIUS + 0.4 },
       { x: stationPositions.cafe[0], z: stationPositions.cafe[2], radius: 1.0 },
-      { x: 14, z: -10, radius: 2.4 },
+      { x: 20, z: -12, radius: 2.4 },
     ]
 
     colliders.forEach((collider) => {
@@ -2615,8 +2634,8 @@ function GroundPlane() {
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -24]} receiveShadow>
-        <planeGeometry args={[68, 92]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -34]} receiveShadow>
+        <planeGeometry args={[74, 116]} />
         {/* base ground pushed back in depth so every decal above it wins cleanly */}
         <meshStandardMaterial
           color="#dbe3d4"
@@ -2641,8 +2660,8 @@ function GroundFallback() {
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -24]} receiveShadow>
-        <planeGeometry args={[68, 92]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -34]} receiveShadow>
+        <planeGeometry args={[74, 116]} />
         <meshStandardMaterial
           color="#dbe3d4"
           map={grassTexture}
@@ -3973,14 +3992,14 @@ function CafeCart({ highlighted }: { highlighted: boolean }) {
 // room with a slowly-sweeping beam. The player climbs it themselves — hold
 // forward to walk up the outer stairs, back to come down, free look throughout.
 const LIGHTHOUSE_POS: Vec3 = [-18, 0, -16]
-// the imported lighthouse.glb (converted to metal-rough) is the hero tower.
-const LIGHTHOUSE_SCALE = 0.38
-const LIGHTHOUSE_TOP = 15.2 // height of the lamp room on the scaled model
-// the guided rise: the camera lifts up beside the tower to a viewpoint you can
-// then orbit and look around from (no walkable stairs on an imported mesh)
-const LIGHTHOUSE_RISE_TOP = 13 // eye height at the top viewpoint
-const LIGHTHOUSE_RISE_RADIUS = 6.0 // how far out the camera circles the tower
-const LIGHTHOUSE_START_ANGLE = 0.4 // starts on the garden-facing side
+// the climbable lighthouse is procedural: its camera walks the exact stairs, so
+// the climb makes sense and never floats. (The imported lighthouse.glb has no
+// walkable stairs, so it lives on the far horizon as scenery — see FarLighthouse.)
+const LIGHTHOUSE_TOP = 16.5
+const LIGHTHOUSE_TURNS = 2.0
+const LIGHTHOUSE_STAIR_RADIUS = 3.05
+const FAR_LIGHTHOUSE_POS: Vec3 = [26, 0, -70]
+const FAR_LIGHTHOUSE_SCALE = 0.55
 
 function Lighthouse() {
   const beamRef = useRef<THREE.Group>(null)
@@ -3991,36 +4010,103 @@ function Lighthouse() {
     }
   })
 
+  const stepCount = 96
+
   return (
     <group position={LIGHTHOUSE_POS}>
-      {/* the imported hero lighthouse; a simple procedural tower is the fallback
-          while the 6MB model streams in (or if it ever fails to load) */}
-      <SafeModel
-        file="lighthouse_hero.glb"
-        position={[0, 0, 0]}
-        scale={LIGHTHOUSE_SCALE}
-        rotationY={0.2}
-        tint="stone"
-        fallback={
-          <mesh position={[0, LIGHTHOUSE_TOP / 2, 0]}>
-            <cylinderGeometry args={[1.6, 2.6, LIGHTHOUSE_TOP, 22]} />
-            <meshStandardMaterial color="#eae6f0" roughness={0.7} />
-          </mesh>
-        }
-      />
-      {/* crowning light + slowly sweeping beam on top of the model */}
-      <mesh position={[0, LIGHTHOUSE_TOP, 0]}>
-        <sphereGeometry args={[0.6, 16, 16]} />
+      {/* wide stone base the staircase lands on */}
+      <mesh position={[0, 0.45, 0]}>
+        <cylinderGeometry args={[3.5, 3.9, 0.9, 26]} />
+        <meshStandardMaterial color="#4a4e64" roughness={0.85} />
+      </mesh>
+      {/* slim, solid tapered tower — double-sided so a wall is never see-through */}
+      <mesh position={[0, LIGHTHOUSE_TOP / 2 + 0.6, 0]}>
+        <cylinderGeometry args={[1.35, 2.1, LIGHTHOUSE_TOP, 26]} />
+        <meshStandardMaterial color="#eae6f0" roughness={0.7} side={THREE.DoubleSide} />
+      </mesh>
+      {/* two soft accent bands */}
+      {[0.36, 0.68].map((f, index) => (
+        <mesh key={index} position={[0, 0.6 + f * LIGHTHOUSE_TOP, 0]}>
+          <cylinderGeometry args={[2.1 - f * 0.75 + 0.03, 2.1 - f * 0.75 + 0.03, 1.1, 26]} />
+          <meshStandardMaterial color="#c58a86" roughness={0.7} />
+        </mesh>
+      ))}
+      {/* clean external spiral staircase: overlapping radial treads that form a
+          continuous ramp, an outer parapet wall and a handrail cap. Local axes
+          after the y-rotation: +x is radial (outward), +z is tangential. */}
+      {Array.from({ length: stepCount }).map((_, index) => {
+        const t = index / stepCount
+        const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
+        const height = t * LIGHTHOUSE_TOP + 0.5
+        const cx = Math.cos(angle) * LIGHTHOUSE_STAIR_RADIUS
+        const cz = Math.sin(angle) * LIGHTHOUSE_STAIR_RADIUS
+        return (
+          <group key={index} position={[cx, height, cz]} rotation={[0, -angle, 0]}>
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[1.5, 0.12, 0.62]} />
+              <meshStandardMaterial color="#b8adc6" roughness={0.75} />
+            </mesh>
+            <mesh position={[0, -0.16, 0]}>
+              <boxGeometry args={[1.5, 0.3, 0.5]} />
+              <meshStandardMaterial color="#8f85a3" roughness={0.85} />
+            </mesh>
+            <mesh position={[0.72, 0.42, 0]}>
+              <boxGeometry args={[0.1, 0.72, 0.66]} />
+              <meshStandardMaterial color="#9a90ae" roughness={0.75} />
+            </mesh>
+            <mesh position={[0.72, 0.82, 0]}>
+              <boxGeometry args={[0.22, 0.1, 0.66]} />
+              <meshStandardMaterial color="#6f6684" roughness={0.7} />
+            </mesh>
+          </group>
+        )
+      })}
+      {/* gallery platform + railing */}
+      <mesh position={[0, LIGHTHOUSE_TOP + 0.7, 0]}>
+        <cylinderGeometry args={[2.3, 2.3, 0.3, 22]} />
+        <meshStandardMaterial color="#4a4e64" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, LIGHTHOUSE_TOP + 1.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[2.2, 0.06, 8, 26]} />
+        <meshStandardMaterial color="#3a3e52" roughness={0.7} />
+      </mesh>
+      {/* lantern room */}
+      <mesh position={[0, LIGHTHOUSE_TOP + 1.9, 0]}>
+        <cylinderGeometry args={[1.35, 1.5, 1.7, 16]} />
+        <meshStandardMaterial color="#2a2e3e" roughness={0.6} metalness={0.2} />
+      </mesh>
+      <mesh position={[0, LIGHTHOUSE_TOP + 1.9, 0]}>
+        <sphereGeometry args={[0.85, 18, 18]} />
         <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={2.6} toneMapped={false} fog={false} />
       </mesh>
-      <group ref={beamRef} position={[0, LIGHTHOUSE_TOP, 0]}>
+      <mesh position={[0, LIGHTHOUSE_TOP + 3, 0]}>
+        <coneGeometry args={[1.55, 1, 16]} />
+        <meshStandardMaterial color="#3a3e52" roughness={0.7} />
+      </mesh>
+      <group ref={beamRef} position={[0, LIGHTHOUSE_TOP + 1.9, 0]}>
         <mesh position={[4.5, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <coneGeometry args={[1.4, 9, 18, 1, true]} />
+          <coneGeometry args={[1.6, 9, 18, 1, true]} />
           <meshBasicMaterial color="#fff3cd" transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} fog={false} />
         </mesh>
       </group>
-      <LampGlow position={[0, LIGHTHOUSE_TOP, 0]} scale={6} color="#ffe9a8" opacity={0.4} />
-      <pointLight position={[0, LIGHTHOUSE_TOP, 0]} intensity={18} distance={34} color="#ffe9c0" />
+      <LampGlow position={[0, LIGHTHOUSE_TOP + 1.9, 0]} scale={6} color="#ffe9a8" opacity={0.4} />
+      <pointLight position={[0, LIGHTHOUSE_TOP + 1.9, 0]} intensity={18} distance={34} color="#ffe9c0" />
+    </group>
+  )
+}
+
+// The imported lighthouse.glb, placed far on the horizon (behind the hedges, out
+// of reach) as a grand coastal landmark with a glowing beacon.
+function FarLighthouse() {
+  return (
+    <group position={FAR_LIGHTHOUSE_POS}>
+      <SafeModel file="lighthouse_hero.glb" position={[0, 0, 0]} scale={FAR_LIGHTHOUSE_SCALE} rotationY={-0.4} tint="stone" />
+      <mesh position={[0, 21, 0]}>
+        <sphereGeometry args={[0.9, 14, 14]} />
+        <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={2.6} toneMapped={false} fog={false} />
+      </mesh>
+      <LampGlow position={[0, 21, 0]} scale={7} color="#ffe9a8" opacity={0.45} />
+      <pointLight position={[0, 21, 0]} intensity={16} distance={40} color="#ffe9c0" />
     </group>
   )
 }
