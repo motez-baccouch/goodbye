@@ -30,6 +30,16 @@
   pointer-events: auto;
 }
 
+/* soft cinematic vignette to frame the scene; never intercepts input */
+.scene-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 75% 75% at 50% 45%, transparent 58%, rgba(3, 5, 14, 0.42) 100%);
+}
+
 .look-surface.disabled {
   pointer-events: none;
 }

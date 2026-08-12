@@ -1472,6 +1472,7 @@ function SceneCanvas() {
           <GardenModels />
         </Suspense>
         <Comet nonce={cometNonce} />
+        <ShootingStars />
         <Fireworks active={forceFireworks || (finalOpen && !letterVisible && !creditsVisible && !epilogue)} />
         <FranceConstellation visible={finalOpen} />
         <EiffelTower position={[-15.5, 0, -64]} scale={1.35} />
@@ -1503,6 +1504,8 @@ function SceneCanvas() {
         {finalOpen && !letterVisible ? <LetterDisplay /> : null}
         {interactable ? <InteractionBeacon station={interactable.id} /> : null}
       </Canvas>
+
+      <div className="scene-vignette" aria-hidden="true" />
 
       <FreeLookSurface
         disabled={controlsBlocked}
@@ -2184,7 +2187,11 @@ function FirstPersonRig({
       -Math.cos(yawRef.current) * Math.cos(pitchRef.current),
     )
 
-    camera.position.copy(positionRef.current)
+    // a little life: gentle breathing when still, a soft bob while walking
+    const speed = Math.min(1, velocity.length())
+    const bob =
+      Math.sin(clock.elapsedTime * 1.3) * 0.014 + Math.sin(clock.elapsedTime * 8.5) * speed * 0.028
+    camera.position.set(positionRef.current.x, positionRef.current.y + bob, positionRef.current.z)
     camera.lookAt(tmpLookTarget.copy(positionRef.current).add(direction))
 
     if (clock.elapsedTime - sampleTimeRef.current > 0.08) {
@@ -2650,6 +2657,75 @@ function MoonRig() {
       </sprite>
       {/* a faint dusting of stars right around the moon */}
       <Sparkles count={16} scale={[16, 16, 4]} size={2.4} speed={0.1} color="#fff4d6" />
+    </group>
+  )
+}
+
+// Occasional, gentle shooting stars drifting across the upper sky — pure
+// ambience, one at a time, mostly invisible. A little "make a wish" magic.
+function ShootingStars() {
+  const groupRef = useRef<THREE.Group>(null)
+  const glowTexture = useMemo(() => createGlowTexture(), [])
+  const stateRef = useRef({ active: false, t: 0, timer: 4, x0: 0, y0: 16, z: -50, dx: 14, dy: -5 })
+
+  useFrame((_, delta) => {
+    const group = groupRef.current
+
+    if (!group) {
+      return
+    }
+
+    const state = stateRef.current
+
+    if (!state.active) {
+      state.timer -= delta
+
+      if (state.timer <= 0) {
+        state.active = true
+        state.t = 0
+        state.y0 = 15 + Math.random() * 10
+        state.x0 = -32 + Math.random() * 64
+        state.z = -46 - Math.random() * 18
+        const leftward = Math.random() < 0.5
+        state.dx = (leftward ? -1 : 1) * (12 + Math.random() * 9)
+        state.dy = -(3.5 + Math.random() * 4)
+      } else {
+        group.visible = false
+        return
+      }
+    }
+
+    state.t += delta / 0.9
+
+    if (state.t >= 1) {
+      state.active = false
+      state.timer = 7 + Math.random() * 13
+      group.visible = false
+      return
+    }
+
+    const p = state.t
+    group.visible = true
+    group.position.set(state.x0 + state.dx * p, state.y0 + state.dy * p, state.z)
+    group.rotation.z = Math.atan2(state.dy, state.dx)
+    group.scale.setScalar(Math.max(0.01, Math.sin(p * Math.PI)))
+  })
+
+  return (
+    <group ref={groupRef} visible={false}>
+      <mesh>
+        <sphereGeometry args={[0.13, 8, 8]} />
+        <meshBasicMaterial color="#fff6d8" fog={false} />
+      </mesh>
+      <sprite scale={[2.2, 2.2, 1]}>
+        <spriteMaterial map={glowTexture} color="#fff3cd" transparent opacity={0.85} blending={THREE.AdditiveBlending} depthWrite={false} fog={false} />
+      </sprite>
+      {[1, 2, 3, 4, 5, 6].map((step) => (
+        <mesh key={step} position={[-step * 0.5, 0, 0]}>
+          <sphereGeometry args={[Math.max(0.02, 0.11 - step * 0.015), 6, 6]} />
+          <meshBasicMaterial color="#ffeebb" transparent opacity={Math.max(0, 0.5 - step * 0.075)} fog={false} />
+        </mesh>
+      ))}
     </group>
   )
 }
