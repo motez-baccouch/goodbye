@@ -63,8 +63,8 @@ const stationPositions: Record<StationId, Vec3> = {
   final: [0, 0, -42],
   piano: [-5, 0, -0.5],
   lighthouse: [-18, 0, -16],
-  petanque: [-24, 0, -7],
-  cafe: [24, 0, -6],
+  petanque: [-22.5, 0, -8],
+  cafe: [22.5, 0, -6],
 }
 
 // fixed-position secrets the guiding arrow can point to once the memories are done
@@ -1491,7 +1491,7 @@ function SceneCanvas() {
       onPointerDown={() => unlockAudio()}
     >
       <Canvas
-        camera={{ position: [0, 1.6, 9], fov: deviceProfile.mobile ? 72 : 66, near: 0.35, far: 110 }}
+        camera={{ position: [0, 1.6, 9], fov: deviceProfile.mobile ? 72 : 66, near: 0.35, far: 150 }}
         dpr={[1, deviceProfile.dpr]}
         shadows={deviceProfile.enableShadows ? 'percentage' : false}
         gl={{
@@ -1744,7 +1744,7 @@ function SceneCanvas() {
           <p className="climb-message">
             {scoping
               ? "Paris, right there on the horizon. Try not to say 'omelette du fromage' to actual French people. 🥖"
-              : 'The aurora over the whole moonlit garden — worth every step. Look around. (Somewhere down there, that padel ball is still running from you.)'}
+              : 'The aurora over the whole moonlit garden — worth every step. Look around, then just walk back down the stairs when you’re ready.'}
           </p>
           <div className="climb-buttons">
             <button
@@ -1757,16 +1757,6 @@ function SceneCanvas() {
               }}
             >
               {scoping ? 'Lower telescope' : '🔭 Look toward Paris'}
-            </button>
-            <button
-              type="button"
-              className="interact-button"
-              onClick={() => {
-                setScoping(false)
-                setClimb('down')
-              }}
-            >
-              Descend
             </button>
           </div>
         </div>
@@ -1864,37 +1854,53 @@ function SceneCanvas() {
               </ul>
             </div>
             <div className="map-fullscreen-canvas">
+              {/* map covers the enlarged garden: world x[-30,30] -> 10..210,
+                  world z[11,-63] -> 12..308 (mx = x*3.333+110, my = (11-z)*4+12) */}
               <svg className="garden-map-full" viewBox="0 0 220 320" role="img" aria-label="Garden map">
                 <rect x="4" y="4" width="212" height="312" rx="14" fill="#14241a" stroke="#3d5c46" strokeWidth="2" />
-                <line x1="110" y1="30" x2="110" y2="120" stroke="#8d92b4" strokeWidth="5" strokeLinecap="round" />
-                <line x1="55" y1="70" x2="165" y2="70" stroke="#8d92b4" strokeWidth="4" strokeLinecap="round" />
-                <line x1="110" y1="190" x2="110" y2="270" stroke="#8d92b4" strokeWidth="5" strokeLinecap="round" />
-                <line x1="110" y1="212" x2="65" y2="225" stroke="#8d92b4" strokeWidth="4" strokeLinecap="round" />
-                <line x1="110" y1="212" x2="155" y2="225" stroke="#8d92b4" strokeWidth="4" strokeLinecap="round" />
-                <line x1="14" y1="30" x2="97" y2="30" stroke="#2c523a" strokeWidth="6" strokeLinecap="round" />
-                <line x1="123" y1="30" x2="206" y2="30" stroke="#2c523a" strokeWidth="6" strokeLinecap="round" />
-                <circle cx="110" cy="70" r="32" fill="#232c4b" stroke="#8d92b4" strokeWidth="2" />
-                <circle cx="110" cy="70" r="5" fill="#e8d9b8" />
-                <rect x="50" y="110" width="120" height="80" rx="6" fill="none" stroke="#3d5c46" strokeWidth="5" />
-                <rect x="70" y="125" width="80" height="50" rx="5" fill="none" stroke="#3d5c46" strokeWidth="4" />
-                <rect x="90" y="138" width="40" height="24" rx="4" fill="none" stroke="#3d5c46" strokeWidth="3" />
-                <circle cx="110" cy="150" r="4.5" fill="#f9b9d8" />
-                <rect x="104" y="106" width="12" height="8" fill="#14241a" />
-                <rect x="104" y="186" width="12" height="8" fill="#14241a" />
-                <circle cx="55" cy="70" r="7" fill={archiveOpened.every(Boolean) ? '#ffd56f' : '#c9b3ff'} />
-                <text x="55" y="90" textAnchor="middle" className="map-label">Cabinet</text>
-                <circle cx="165" cy="70" r="7" fill={lanternsLit.every(Boolean) ? '#ffd56f' : '#c9b3ff'} />
-                <text x="165" y="90" textAnchor="middle" className="map-label">Lanterns</text>
-                <circle cx="65" cy="225" r="7" fill={pathCollected.every(Boolean) ? '#ffd56f' : '#c9b3ff'} />
-                <text x="65" y="245" textAnchor="middle" className="map-label">Drive</text>
-                <circle cx="155" cy="225" r="7" fill={pagesTurned.every(Boolean) ? '#ffd56f' : '#c9b3ff'} />
-                <text x="155" y="245" textAnchor="middle" className="map-label">Bench</text>
-                <circle cx="110" cy="270" r="7" fill={finalUnlocked ? '#ffd56f' : '#8d92b4'} />
-                <text x="110" y="290" textAnchor="middle" className="map-label">The Arch</text>
-                <text x="110" y="22" textAnchor="middle" className="map-label">Moon Gate</text>
+                {/* central spine + cross paths */}
+                <line x1="110" y1="34" x2="110" y2="96" stroke="#8d92b4" strokeWidth="5" strokeLinecap="round" />
+                <line x1="110" y1="160" x2="110" y2="224" stroke="#8d92b4" strokeWidth="5" strokeLinecap="round" />
+                <line x1="73" y1="64" x2="147" y2="64" stroke="#8d92b4" strokeWidth="3.5" strokeLinecap="round" />
+                <line x1="80" y1="188" x2="140" y2="188" stroke="#8d92b4" strokeWidth="3.5" strokeLinecap="round" />
+                {/* front hedge with the gate gap */}
+                <line x1="12" y1="34" x2="100" y2="34" stroke="#2c523a" strokeWidth="6" strokeLinecap="round" />
+                <line x1="120" y1="34" x2="208" y2="34" stroke="#2c523a" strokeWidth="6" strokeLinecap="round" />
+                {/* the hedge labyrinth */}
+                <rect x="70" y="96" width="80" height="64" rx="5" fill="none" stroke="#3d5c46" strokeWidth="4" />
+                <rect x="86" y="112" width="48" height="32" rx="4" fill="none" stroke="#3d5c46" strokeWidth="3" />
+                <circle cx="110" cy="128" r="3.5" fill="#f9b9d8" />
+                {/* tea plaza */}
+                <circle cx="110" cy="52" r="6" fill="none" stroke="#8d92b4" strokeWidth="1.5" />
+                <text x="110" y="20" textAnchor="middle" className="map-label">Moon Gate</text>
+
+                {/* memory stations */}
+                <circle cx="73" cy="64" r="6" fill={archiveOpened.every(Boolean) ? '#ffd56f' : '#c9b3ff'} />
+                <text x="73" y="80" textAnchor="middle" className="map-label">Cabinet</text>
+                <circle cx="147" cy="64" r="6" fill={lanternsLit.every(Boolean) ? '#ffd56f' : '#c9b3ff'} />
+                <text x="147" y="80" textAnchor="middle" className="map-label">Lanterns</text>
+                <circle cx="80" cy="188" r="6" fill={pathCollected.every(Boolean) ? '#ffd56f' : '#c9b3ff'} />
+                <text x="80" y="204" textAnchor="middle" className="map-label">Drive</text>
+                <circle cx="140" cy="188" r="6" fill={pagesTurned.every(Boolean) ? '#ffd56f' : '#c9b3ff'} />
+                <text x="140" y="204" textAnchor="middle" className="map-label">Bench</text>
+                <circle cx="110" cy="224" r="7" fill={finalUnlocked ? '#ffd56f' : '#8d92b4'} />
+                <text x="110" y="240" textAnchor="middle" className="map-label">The Arch</text>
+
+                {/* landmarks & optional stops */}
+                <circle cx="93" cy="58" r="4" fill="#ffcf8a" />
+                <text x="93" y="49" textAnchor="middle" className="map-label">Piano</text>
+                <circle cx="50" cy="120" r="5" fill="#ffe27a" />
+                <text x="50" y="136" textAnchor="middle" className="map-label">Lighthouse</text>
+                <circle cx="35" cy="88" r="5" fill="#d8a24a" />
+                <text x="35" y="104" textAnchor="middle" className="map-label">Pétanque</text>
+                <circle cx="185" cy="80" r="5" fill="#e0705a" />
+                <text x="185" y="96" textAnchor="middle" className="map-label">Café</text>
+                <circle cx="165" cy="136" r="6" fill="#5aa0d8" />
+                <text x="165" y="152" textAnchor="middle" className="map-label">Pond</text>
+
                 <circle
-                  cx={clamp(playerSample.x * 5 + 110, 8, 212)}
-                  cy={clamp((12 - playerSample.z) * 5, 8, 312)}
+                  cx={clamp(playerSample.x * 3.333 + 110, 8, 212)}
+                  cy={clamp((11 - playerSample.z) * 4 + 12, 8, 312)}
                   r="6"
                   fill="#fff6de"
                   stroke="#3f2d1d"
@@ -2335,7 +2341,7 @@ function FirstPersonRig({
 
       const t = climbTRef.current
       const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
-      const radius = LIGHTHOUSE_RADIUS + 0.5
+      const radius = LIGHTHOUSE_STAIR_RADIUS
       const height = t * LIGHTHOUSE_TOP
       const cx = LIGHTHOUSE_POS[0] + Math.cos(angle) * radius
       const cz = LIGHTHOUSE_POS[2] + Math.sin(angle) * radius
@@ -2434,8 +2440,8 @@ function FirstPersonRig({
       }
     }
 
-    positionRef.current.x = clamp(positionRef.current.x, -30.5, 30.5)
-    positionRef.current.z = clamp(positionRef.current.z, -62.5, 10.5)
+    positionRef.current.x = clamp(positionRef.current.x, -28.8, 28.8)
+    positionRef.current.z = clamp(positionRef.current.z, -61.5, 10.2)
 
     if (!gateOpen && positionRef.current.z < 7 && Math.abs(positionRef.current.x) < 2.6) {
       positionRef.current.z = 7
@@ -2446,7 +2452,7 @@ function FirstPersonRig({
       { x: 0, z: -2, radius: 1.2 },
       { x: 0, z: -46, radius: 1.35 },
       { x: -5, z: -0.5, radius: 1.1 },
-      { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 2.6 },
+      { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 3.3 },
       { x: POND_POS[0], z: POND_POS[2], radius: POND_RADIUS + 0.4 },
       { x: stationPositions.cafe[0], z: stationPositions.cafe[2], radius: 1.0 },
     ]
@@ -3318,11 +3324,14 @@ function SmileyConstellation({ position, scale = 1 }: { position: Vec3; scale?: 
 function SkyConstellations() {
   return (
     <group>
-      <SkyConstellation points={CONSTELLATION_STAR} position={[-28, 30, -82]} scale={2} color="#ffe6a1" />
-      <SkyConstellation points={CONSTELLATION_EIFFEL} position={[24, 27, -86]} scale={2.4} color="#cfe0ff" />
-      <SkyConstellation points={CONSTELLATION_W} position={[2, 36, -90]} scale={2.2} color="#bcccff" />
-      {/* a cheeky smiley hanging over the lantern grove */}
-      <SmileyConstellation position={[15, 22, -56]} scale={2} />
+      {/* scattered far across the night sky, well beyond the aurora */}
+      <SkyConstellation points={CONSTELLATION_STAR} position={[-48, 34, -104]} scale={2.4} color="#ffe6a1" />
+      <SkyConstellation points={CONSTELLATION_EIFFEL} position={[42, 40, -114]} scale={2.9} color="#cfe0ff" />
+      <SkyConstellation points={CONSTELLATION_W} position={[-10, 50, -110]} scale={2.6} color="#bcccff" />
+      <SkyConstellation points={CONSTELLATION_STAR} position={[56, 28, -100]} scale={1.7} color="#e7d9ff" />
+      <SkyConstellation points={CONSTELLATION_W} position={[-60, 44, -118]} scale={2} color="#ffd9c0" />
+      {/* a cheeky smiley hung high and far over the east sky */}
+      <SmileyConstellation position={[26, 46, -100]} scale={2.4} />
     </group>
   )
 }
@@ -3746,10 +3755,10 @@ function BannerPlane() {
 // lavender field on the far west lawn, and a tiny French village silhouetted on
 // the northern horizon with warm-lit windows. All procedural, all cheap.
 const CYPRESS_SPOTS: Array<[number, number]> = [
-  [-28, 2], [-28, -12], [-28, -28], [-28, -44], [-28, -58],
-  [28, 2], [28, -12], [28, -28], [28, -44], [28, -58],
-  [-20, -63], [-8, -64], [8, -64], [20, -63],
-  [-25, 8], [25, 8],
+  [-29.6, 2], [-29.6, -12], [-29.6, -28], [-29.6, -44], [-29.6, -58],
+  [29.6, 2], [29.6, -12], [29.6, -28], [29.6, -44], [29.6, -58],
+  [-20, -66], [-8, -67], [8, -67], [20, -66],
+  [-27, 9.6], [27, 9.6],
 ]
 
 function Cypress({ position, tall }: { position: [number, number]; tall: number }) {
@@ -3948,7 +3957,9 @@ function CafeCart({ highlighted }: { highlighted: boolean }) {
 const LIGHTHOUSE_POS: Vec3 = [-18, 0, -16]
 const LIGHTHOUSE_TOP = 16.5
 const LIGHTHOUSE_TURNS = 2.75
-const LIGHTHOUSE_RADIUS = 1.7
+// the outer staircase (and the climbing camera) wrap the tower at this radius —
+// safely OUTSIDE the tower wall at every height so you never see through it
+const LIGHTHOUSE_STAIR_RADIUS = 3.05
 
 function Lighthouse() {
   const beamRef = useRef<THREE.Group>(null)
@@ -3959,39 +3970,64 @@ function Lighthouse() {
     }
   })
 
+  const stepCount = 70
+
   return (
     <group position={LIGHTHOUSE_POS}>
-      {/* stone base */}
+      {/* wide stone base the staircase lands on */}
       <mesh position={[0, 0.45, 0]}>
-        <cylinderGeometry args={[2.7, 3.1, 0.9, 22]} />
+        <cylinderGeometry args={[3.5, 3.9, 0.9, 26]} />
         <meshStandardMaterial color="#4a4e64" roughness={0.85} />
       </mesh>
-      {/* tapered tower */}
+      {/* slim, solid tapered tower — double-sided so a wall is never see-through */}
       <mesh position={[0, LIGHTHOUSE_TOP / 2 + 0.6, 0]}>
-        <cylinderGeometry args={[1.5, 2.5, LIGHTHOUSE_TOP, 22]} />
-        <meshStandardMaterial color="#eae6f0" roughness={0.7} />
+        <cylinderGeometry args={[1.35, 2.1, LIGHTHOUSE_TOP, 26]} />
+        <meshStandardMaterial color="#eae6f0" roughness={0.7} side={THREE.DoubleSide} />
       </mesh>
       {/* two soft accent bands */}
       {[0.36, 0.68].map((f, index) => (
         <mesh key={index} position={[0, 0.6 + f * LIGHTHOUSE_TOP, 0]}>
-          <cylinderGeometry args={[2.5 - f * 1 + 0.03, 2.5 - f * 1 + 0.03, 1.1, 22]} />
+          <cylinderGeometry args={[2.1 - f * 0.75 + 0.03, 2.1 - f * 0.75 + 0.03, 1.1, 26]} />
           <meshStandardMaterial color="#c58a86" roughness={0.7} />
         </mesh>
       ))}
-      {/* visible spiral staircase winding up the outside */}
-      {Array.from({ length: 42 }).map((_, index) => {
-        const t = index / 42
+      {/* a proper external spiral staircase wrapping the tower: wedge steps +
+          posts + a helical handrail, all at the outer stair radius */}
+      {Array.from({ length: stepCount }).map((_, index) => {
+        const t = index / stepCount
         const angle = t * LIGHTHOUSE_TURNS * Math.PI * 2 - Math.PI / 2
-        const height = t * LIGHTHOUSE_TOP
+        const height = t * LIGHTHOUSE_TOP + 0.55
+        const cx = Math.cos(angle) * LIGHTHOUSE_STAIR_RADIUS
+        const cz = Math.sin(angle) * LIGHTHOUSE_STAIR_RADIUS
+        const railTop = height + 0.95
         return (
-          <mesh
-            key={index}
-            position={[Math.cos(angle) * LIGHTHOUSE_RADIUS, 0.5 + height, Math.sin(angle) * LIGHTHOUSE_RADIUS]}
-            rotation={[0, -angle, 0]}
-          >
-            <boxGeometry args={[1, 0.12, 0.5]} />
-            <meshStandardMaterial color="#9a8fac" roughness={0.7} />
-          </mesh>
+          <group key={index}>
+            {/* the tread */}
+            <mesh position={[cx, height, cz]} rotation={[0, -angle, 0]}>
+              <boxGeometry args={[1.4, 0.14, 0.62]} />
+              <meshStandardMaterial color="#b8adc6" roughness={0.7} />
+            </mesh>
+            {/* a support strut down to imply the stringer */}
+            <mesh position={[cx * 0.93, height - 0.4, cz * 0.93]}>
+              <boxGeometry args={[0.1, 0.8, 0.1]} />
+              <meshStandardMaterial color="#7d7390" roughness={0.8} />
+            </mesh>
+            {/* outer railing post every couple of steps */}
+            {index % 2 === 0 ? (
+              <mesh position={[Math.cos(angle) * (LIGHTHOUSE_STAIR_RADIUS + 0.42), height + 0.48, Math.sin(angle) * (LIGHTHOUSE_STAIR_RADIUS + 0.42)]}>
+                <boxGeometry args={[0.06, 0.95, 0.06]} />
+                <meshStandardMaterial color="#6f6684" roughness={0.8} />
+              </mesh>
+            ) : null}
+            {/* helical handrail segment linking this step's rail height to the next */}
+            <mesh
+              position={[Math.cos(angle) * (LIGHTHOUSE_STAIR_RADIUS + 0.42), railTop, Math.sin(angle) * (LIGHTHOUSE_STAIR_RADIUS + 0.42)]}
+              rotation={[0, -angle, 0.16]}
+            >
+              <boxGeometry args={[1.5, 0.07, 0.07]} />
+              <meshStandardMaterial color="#8a7fa0" roughness={0.7} />
+            </mesh>
+          </group>
         )
       })}
       {/* gallery platform + railing */}
@@ -4031,69 +4067,117 @@ function Lighthouse() {
   )
 }
 
-// A small, stylised low-poly Eiffel tower — a quiet nod to "break a leg in
-// France" standing on the far horizon behind the garden.
+// warm golden-iron material for the Eiffel tower (fresh instance per mesh)
+function EiffelIron() {
+  return <meshStandardMaterial color="#7a6446" roughness={0.65} emissive="#3a2c18" emissiveIntensity={0.35} flatShading />
+}
+
+// A stylised low-poly Eiffel tower with the iconic lattice look: four curved
+// legs, arched base, X cross-bracing, three platforms and a golden night glow.
+// Stands on the far horizon — a nod to "break a leg in France."
 function EiffelTower({ position, scale = 1 }: { position: Vec3; scale?: number }) {
-  const iron = '#4a4450'
   const corners: Array<[number, number]> = [
     [1, 1],
     [1, -1],
     [-1, 1],
     [-1, -1],
   ]
+  // the four faces of the tower, each spanned by a pair of corner legs
+  const faces: Array<{ pos: [number, number]; rot: number }> = [
+    { pos: [0, 0.86], rot: 0 },
+    { pos: [0, -0.86], rot: Math.PI },
+    { pos: [0.86, 0], rot: Math.PI / 2 },
+    { pos: [-0.86, 0], rot: -Math.PI / 2 },
+  ]
 
   return (
     <group position={position} scale={scale}>
-      {/* four legs, leaning inward */}
+      {/* four splayed legs — a lower and upper segment give the classic curve */}
       {corners.map(([sx, sz], index) => (
-        <mesh key={index} position={[sx * 0.72, 1.75, sz * 0.72]} rotation={[sz * 0.12, 0, -sx * 0.12]}>
-          <cylinderGeometry args={[0.09, 0.17, 3.7, 4]} />
-          <meshStandardMaterial color={iron} roughness={0.7} flatShading />
-        </mesh>
+        <group key={index}>
+          <mesh position={[sx * 0.86, 0.95, sz * 0.86]} rotation={[sz * 0.2, 0, -sx * 0.2]}>
+            <cylinderGeometry args={[0.14, 0.22, 2.1, 4]} />
+            <EiffelIron />
+          </mesh>
+          <mesh position={[sx * 0.56, 2.85, sz * 0.56]} rotation={[sz * 0.1, 0, -sx * 0.1]}>
+            <cylinderGeometry args={[0.1, 0.14, 1.9, 4]} />
+            <EiffelIron />
+          </mesh>
+        </group>
       ))}
-      {/* iconic arched base on each of the four faces */}
-      {[
-        { p: [0, 1, 0.72] as Vec3, r: [0, 0, 0] as Vec3 },
-        { p: [0, 1, -0.72] as Vec3, r: [0, Math.PI, 0] as Vec3 },
-        { p: [0.72, 1, 0] as Vec3, r: [0, Math.PI / 2, 0] as Vec3 },
-        { p: [-0.72, 1, 0] as Vec3, r: [0, -Math.PI / 2, 0] as Vec3 },
-      ].map((arch, index) => (
-        <mesh key={`arch-${index}`} position={arch.p} rotation={arch.r}>
-          <torusGeometry args={[0.7, 0.05, 6, 14, Math.PI]} />
-          <meshStandardMaterial color={iron} roughness={0.7} flatShading />
-        </mesh>
+      {/* iconic arch + X cross-bracing on each of the four faces */}
+      {faces.map((face, index) => (
+        <group key={`face-${index}`} position={[face.pos[0], 0, face.pos[1]]} rotation={[0, face.rot, 0]}>
+          <mesh position={[0, 1.35, 0]}>
+            <torusGeometry args={[0.72, 0.05, 6, 16, Math.PI]} />
+            <EiffelIron />
+          </mesh>
+          <mesh position={[0, 1.0, 0]} rotation={[0, 0, 0.7]}>
+            <boxGeometry args={[2.0, 0.05, 0.05]} />
+            <EiffelIron />
+          </mesh>
+          <mesh position={[0, 1.0, 0]} rotation={[0, 0, -0.7]}>
+            <boxGeometry args={[2.0, 0.05, 0.05]} />
+            <EiffelIron />
+          </mesh>
+          <mesh position={[0, 2.9, 0]} rotation={[0, 0, 0.75]}>
+            <boxGeometry args={[1.35, 0.04, 0.04]} />
+            <EiffelIron />
+          </mesh>
+          <mesh position={[0, 2.9, 0]} rotation={[0, 0, -0.75]}>
+            <boxGeometry args={[1.35, 0.04, 0.04]} />
+            <EiffelIron />
+          </mesh>
+        </group>
       ))}
       {/* first platform */}
-      <mesh position={[0, 3.5, 0]}>
-        <boxGeometry args={[1.55, 0.18, 1.55]} />
-        <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+      <mesh position={[0, 3.9, 0]}>
+        <boxGeometry args={[1.75, 0.2, 1.75]} />
+        <EiffelIron />
       </mesh>
-      {/* tapered mid section */}
-      <mesh position={[0, 5.1, 0]}>
-        <cylinderGeometry args={[0.24, 0.5, 3, 4]} />
-        <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+      {/* tapered mid section with X-braces */}
+      <mesh position={[0, 5.6, 0]}>
+        <cylinderGeometry args={[0.28, 0.55, 3.2, 4]} />
+        <EiffelIron />
       </mesh>
+      {faces.map((face, index) => (
+        <group key={`mid-${index}`} position={[face.pos[0] * 0.5, 5.6, face.pos[1] * 0.5]} rotation={[0, face.rot, 0]}>
+          <mesh rotation={[0, 0, 0.8]}>
+            <boxGeometry args={[1.5, 0.04, 0.04]} />
+            <EiffelIron />
+          </mesh>
+          <mesh rotation={[0, 0, -0.8]}>
+            <boxGeometry args={[1.5, 0.04, 0.04]} />
+            <EiffelIron />
+          </mesh>
+        </group>
+      ))}
       {/* second platform */}
-      <mesh position={[0, 6.7, 0]}>
-        <boxGeometry args={[0.82, 0.14, 0.82]} />
-        <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+      <mesh position={[0, 7.3, 0]}>
+        <boxGeometry args={[0.92, 0.16, 0.92]} />
+        <EiffelIron />
       </mesh>
       {/* upper taper */}
-      <mesh position={[0, 8.3, 0]}>
-        <cylinderGeometry args={[0.07, 0.24, 3.2, 4]} />
-        <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+      <mesh position={[0, 9.0, 0]}>
+        <cylinderGeometry args={[0.09, 0.28, 3.4, 4]} />
+        <EiffelIron />
+      </mesh>
+      {/* third (top) platform */}
+      <mesh position={[0, 10.7, 0]}>
+        <boxGeometry args={[0.34, 0.12, 0.34]} />
+        <EiffelIron />
       </mesh>
       {/* spire */}
-      <mesh position={[0, 10.3, 0]}>
-        <cylinderGeometry args={[0.02, 0.07, 1.5, 6]} />
-        <meshStandardMaterial color={iron} roughness={0.7} />
+      <mesh position={[0, 11.6, 0]}>
+        <cylinderGeometry args={[0.02, 0.08, 1.6, 6]} />
+        <EiffelIron />
       </mesh>
       {/* beacon at the very top */}
-      <mesh position={[0, 11.2, 0]}>
-        <sphereGeometry args={[0.1, 10, 10]} />
-        <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={2} toneMapped={false} fog={false} />
+      <mesh position={[0, 12.5, 0]}>
+        <sphereGeometry args={[0.11, 10, 10]} />
+        <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={2.2} toneMapped={false} fog={false} />
       </mesh>
-      <LampGlow position={[0, 11.2, 0]} scale={2.4} color="#ffe9a8" opacity={0.55} />
+      <LampGlow position={[0, 12.5, 0]} scale={2.6} color="#ffe9a8" opacity={0.6} />
     </group>
   )
 }
@@ -5100,11 +5184,13 @@ function TapRaycaster({
 }
 
 // a tidy continuous hedge wall around the garden (far nicer than scattered spheres)
+// perimeter hedges, grown to enclose the enlarged garden (the old ones sat at
+// ±21 and cut through the new far lawns / landmarks)
 const hedgeWallSegments: Array<{ pos: Vec3; size: [number, number, number] }> = [
-  { pos: [0, 0.9, 11], size: [43, 1.8, 1.4] },
-  { pos: [0, 0.9, -51], size: [43, 1.8, 1.4] },
-  { pos: [-21, 0.9, -20], size: [1.4, 1.8, 63] },
-  { pos: [21, 0.9, -20], size: [1.4, 1.8, 63] },
+  { pos: [0, 0.9, 11], size: [61, 1.8, 1.4] },
+  { pos: [0, 0.9, -63], size: [61, 1.8, 1.4] },
+  { pos: [-30, 0.9, -26], size: [1.4, 1.8, 75] },
+  { pos: [30, 0.9, -26], size: [1.4, 1.8, 75] },
 ]
 
 function HedgeWalls() {
@@ -5127,7 +5213,10 @@ function HedgeWalls() {
 }
 
 // instanced grass tufts scattered on the lawn for a lusher, less bare ground
-function GrassBlades({ count = 280 }: { count?: number }) {
+// Low-poly grass: flat blade quads (not cone/sphere tufts), scattered across the
+// whole enlarged lawn. Two instanced meshes crossed 90° so blades read from any
+// angle without ever looking edge-on-invisible.
+function GrassBlades({ count = 340 }: { count?: number }) {
   const meshRef = useRef<THREE.InstancedMesh>(null)
 
   useEffect(() => {
@@ -5141,22 +5230,26 @@ function GrassBlades({ count = 280 }: { count?: number }) {
     for (let index = 0; index < count; index += 1) {
       const seed = index * 4
       const side = pseudoRandom(seed + 1) < 0.5 ? -1 : 1
-      const x = side * (3.5 + pseudoRandom(seed + 2) * 15.5)
-      const z = -50 + pseudoRandom(seed + 3) * 59
-      const scale = 0.7 + pseudoRandom(seed + 5) * 0.8
-      dummy.position.set(x, 0.24 * scale, z)
-      dummy.rotation.set((pseudoRandom(seed + 6) - 0.5) * 0.35, pseudoRandom(seed + 4) * Math.PI, (pseudoRandom(seed + 7) - 0.5) * 0.35)
+      const x = side * (3.5 + pseudoRandom(seed + 2) * 23.5)
+      const z = -60 + pseudoRandom(seed + 3) * 69
+      const scale = 0.7 + pseudoRandom(seed + 5) * 0.9
+      dummy.position.set(x, 0.3 * scale, z)
+      dummy.rotation.set((pseudoRandom(seed + 6) - 0.5) * 0.25, pseudoRandom(seed + 4) * Math.PI, (pseudoRandom(seed + 7) - 0.5) * 0.22)
       dummy.scale.set(scale, scale, scale)
       dummy.updateMatrix()
       mesh.setMatrixAt(index, dummy.matrix)
+      // a second blade crossed 90° at the same spot for fuller, non-flat tufts
+      dummy.rotation.y += Math.PI / 2
+      dummy.updateMatrix()
+      mesh.setMatrixAt(index + count, dummy.matrix)
     }
     mesh.instanceMatrix.needsUpdate = true
   }, [count])
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false} castShadow={false}>
-      <coneGeometry args={[0.055, 0.52, 4]} />
-      <meshStandardMaterial color="#43704b" roughness={0.9} flatShading />
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count * 2]} frustumCulled={false} castShadow={false}>
+      <planeGeometry args={[0.16, 0.62]} />
+      <meshStandardMaterial color="#3f6b46" emissive="#16301c" emissiveIntensity={0.25} roughness={0.95} side={THREE.DoubleSide} />
     </instancedMesh>
   )
 }
