@@ -527,6 +527,8 @@ const preloadedModels = [
   'flower_yellowC.glb',
   'grass_leafs.glb',
   'sakura.glb',
+  'fountain.glb',
+  'lamp_post.glb',
   'tableRound.glb',
   'food/cup-tea.glb',
   'food/plate.glb',
@@ -1590,6 +1592,8 @@ function SceneCanvas() {
           fallback={<EiffelTower position={[-15.5, 0, -64]} scale={1.35} />}
         />
         <SakuraTrees />
+        <GardenLamps />
+        <SafeModel file="fountain.glb" position={[14, 0, -10]} scale={0.55} rotationY={0.4} tint="stone" />
         <Lighthouse />
         <PetanqueCourt highlighted={interactable?.id === 'petanque'} />
         <CafeCart highlighted={interactable?.id === 'cafe'} />
@@ -2477,6 +2481,7 @@ function FirstPersonRig({
       { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 3.3 },
       { x: POND_POS[0], z: POND_POS[2], radius: POND_RADIUS + 0.4 },
       { x: stationPositions.cafe[0], z: stationPositions.cafe[2], radius: 1.0 },
+      { x: 14, z: -10, radius: 2.4 },
     ]
 
     colliders.forEach((collider) => {
@@ -4648,6 +4653,29 @@ function SakuraTrees() {
     <group>
       {sakuraTrees.map((tree, index) => (
         <SafeModel key={index} file="sakura.glb" position={tree.position} scale={tree.scale} rotationY={tree.rotationY} tint="flower" />
+      ))}
+    </group>
+  )
+}
+
+// Imported low-poly lamp posts (modelled ~469u tall, so scaled way down) lining
+// the paths, each with a warm glow at the bulb.
+const gardenLamps: Array<{ position: Vec3; rotationY: number }> = [
+  { position: [-3, 0, 4.8], rotationY: 0 },
+  { position: [3, 0, 4.8], rotationY: 0 },
+  { position: [-3.4, 0, -7], rotationY: 0.5 },
+  { position: [3.4, 0, -7], rotationY: -0.5 },
+]
+
+function GardenLamps() {
+  return (
+    <group>
+      {gardenLamps.map((lamp, index) => (
+        <group key={index} position={lamp.position}>
+          <SafeModel file="lamp_post.glb" position={[0, 0, 0]} scale={0.008} rotationY={lamp.rotationY} tint="stone" />
+          <LampGlow position={[0, 3.5, 0]} scale={1.5} color="#ffe9a8" opacity={0.5} />
+          <pointLight position={[0, 3.5, 0]} intensity={3.5} distance={7} color="#ffdfa0" />
+        </group>
       ))}
     </group>
   )
