@@ -588,7 +588,6 @@ const preloadedModels = [
   'food/plate.glb',
   'food/croissant.glb',
   'food/cookie.glb',
-  'town/fence-gate.glb',
   'town/cart.glb',
   'graveyard/lantern-glass.glb',
   'graveyard/bench.glb',
@@ -1475,6 +1474,7 @@ function SceneCanvas() {
         <Comet nonce={cometNonce} />
         <Fireworks active={forceFireworks || (finalOpen && !letterVisible && !creditsVisible && !epilogue)} />
         <FranceConstellation visible={finalOpen} />
+        <EiffelTower position={[-15.5, 0, -64]} scale={1.35} />
         <SecretHitbox secret="boss" position={[0, 1.9, -46]} radius={1.9} />
         <SecretHitbox secret="cart" position={[6.8, 0.7, 3.2]} radius={1.1} />
         <SecretMarker position={[-12.2, 1.15, -3.9]} found={secretsFound.includes('teddy')} />
@@ -2816,6 +2816,73 @@ const EIFFEL_STARS: Vec3[] = [
   [0, 1.2, 0],
 ]
 
+// A small, stylised low-poly Eiffel tower — a quiet nod to "break a leg in
+// France" standing on the far horizon behind the garden.
+function EiffelTower({ position, scale = 1 }: { position: Vec3; scale?: number }) {
+  const iron = '#4a4450'
+  const corners: Array<[number, number]> = [
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+  ]
+
+  return (
+    <group position={position} scale={scale}>
+      {/* four legs, leaning inward */}
+      {corners.map(([sx, sz], index) => (
+        <mesh key={index} position={[sx * 0.72, 1.75, sz * 0.72]} rotation={[sz * 0.12, 0, -sx * 0.12]}>
+          <cylinderGeometry args={[0.09, 0.17, 3.7, 4]} />
+          <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+        </mesh>
+      ))}
+      {/* iconic arched base on each of the four faces */}
+      {[
+        { p: [0, 1, 0.72] as Vec3, r: [0, 0, 0] as Vec3 },
+        { p: [0, 1, -0.72] as Vec3, r: [0, Math.PI, 0] as Vec3 },
+        { p: [0.72, 1, 0] as Vec3, r: [0, Math.PI / 2, 0] as Vec3 },
+        { p: [-0.72, 1, 0] as Vec3, r: [0, -Math.PI / 2, 0] as Vec3 },
+      ].map((arch, index) => (
+        <mesh key={`arch-${index}`} position={arch.p} rotation={arch.r}>
+          <torusGeometry args={[0.7, 0.05, 6, 14, Math.PI]} />
+          <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+        </mesh>
+      ))}
+      {/* first platform */}
+      <mesh position={[0, 3.5, 0]}>
+        <boxGeometry args={[1.55, 0.18, 1.55]} />
+        <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+      </mesh>
+      {/* tapered mid section */}
+      <mesh position={[0, 5.1, 0]}>
+        <cylinderGeometry args={[0.24, 0.5, 3, 4]} />
+        <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+      </mesh>
+      {/* second platform */}
+      <mesh position={[0, 6.7, 0]}>
+        <boxGeometry args={[0.82, 0.14, 0.82]} />
+        <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+      </mesh>
+      {/* upper taper */}
+      <mesh position={[0, 8.3, 0]}>
+        <cylinderGeometry args={[0.07, 0.24, 3.2, 4]} />
+        <meshStandardMaterial color={iron} roughness={0.7} flatShading />
+      </mesh>
+      {/* spire */}
+      <mesh position={[0, 10.3, 0]}>
+        <cylinderGeometry args={[0.02, 0.07, 1.5, 6]} />
+        <meshStandardMaterial color={iron} roughness={0.7} />
+      </mesh>
+      {/* beacon at the very top */}
+      <mesh position={[0, 11.2, 0]}>
+        <sphereGeometry args={[0.1, 10, 10]} />
+        <meshStandardMaterial color="#fff3c8" emissive="#ffe27a" emissiveIntensity={2} toneMapped={false} fog={false} />
+      </mesh>
+      <LampGlow position={[0, 11.2, 0]} scale={2.4} color="#ffe9a8" opacity={0.55} />
+    </group>
+  )
+}
+
 function FranceConstellation({ visible }: { visible: boolean }) {
   const groupRef = useRef<THREE.Group>(null)
   const glowTexture = useMemo(() => createGlowTexture(), [])
@@ -3977,64 +4044,63 @@ function RoseBush({ position, scale }: { position: Vec3; scale: number }) {
   )
 }
 
-function GateModel({ open }: { open: boolean }) {
-  const url = MODEL_BASE + 'town/fence-gate.glb'
-  const { scene } = useGLTF(url)
-  const leftHalf = useMemo(() => scene.clone(true), [scene])
-  const rightHalf = useMemo(() => scene.clone(true), [scene])
-  const gatesRef = useRef<THREE.Object3D[]>([])
-  const lift = useMemo(() => getBaseOffset(scene, url) * 2.6, [scene, url])
+// One swinging gate leaf, hinged at the local origin, spanning to the centre.
+function GateLeaf({ dir }: { dir: 1 | -1 }) {
+  const width = 2.6
+  const centre = dir * (width / 2)
 
-  useEffect(() => {
-    applyNightTint(scene, url, modelTints.nature)
-    gatesRef.current = [leftHalf.getObjectByName('gate'), rightHalf.getObjectByName('gate')].filter(
-      (node): node is THREE.Object3D => Boolean(node),
-    )
-  }, [scene, url, leftHalf, rightHalf])
-
-  useFrame(() => {
-    gatesRef.current.forEach((gate) => {
-      gate.rotation.y = THREE.MathUtils.lerp(gate.rotation.y, open ? -1.5 : 0, 0.055)
-    })
-  })
-
-  // two mirrored halves make a symmetric double door meeting at the centre
   return (
     <group>
-      <primitive object={leftHalf} position={[-2.6, lift, 0]} scale={2.6} />
-      <group position={[2.6, lift, 0]} scale={[-2.6, 2.6, 2.6]}>
-        <primitive object={rightHalf} />
-      </group>
+      {/* main panel */}
+      <mesh position={[centre, 1.15, 0]}>
+        <boxGeometry args={[width, 2.3, 0.1]} />
+        <meshStandardMaterial color="#c9b596" roughness={0.7} />
+      </mesh>
+      {/* top & bottom rails */}
+      {[0.25, 2.05].map((y) => (
+        <mesh key={y} position={[centre, y, 0.07]}>
+          <boxGeometry args={[width, 0.2, 0.06]} />
+          <meshStandardMaterial color="#a98d68" roughness={0.7} />
+        </mesh>
+      ))}
+      {/* diagonal brace */}
+      <mesh position={[centre, 1.15, 0.08]} rotation={[0, 0, dir * 0.62]}>
+        <boxGeometry args={[2.7, 0.16, 0.04]} />
+        <meshStandardMaterial color="#a98d68" roughness={0.7} />
+      </mesh>
+      {/* little moon motif near the meeting edge */}
+      <mesh position={[dir * (width - 0.35), 1.55, 0.09]}>
+        <circleGeometry args={[0.22, 20]} />
+        <meshStandardMaterial color="#fff3d0" emissive="#ffe9ad" emissiveIntensity={0.5} roughness={0.4} />
+      </mesh>
     </group>
   )
 }
 
+// A clean double gate that fully seals the opening when closed and swings
+// outward toward the player when opened.
 function ProceduralGateDoors({ open }: { open: boolean }) {
   const leftRef = useRef<THREE.Group>(null)
   const rightRef = useRef<THREE.Group>(null)
 
   useFrame(() => {
     if (leftRef.current) {
-      leftRef.current.rotation.y = THREE.MathUtils.lerp(leftRef.current.rotation.y, open ? 1.5 : 0, 0.06)
+      leftRef.current.rotation.y = THREE.MathUtils.lerp(leftRef.current.rotation.y, open ? -1.45 : 0, 0.07)
     }
     if (rightRef.current) {
-      rightRef.current.rotation.y = THREE.MathUtils.lerp(rightRef.current.rotation.y, open ? -1.5 : 0, 0.06)
+      rightRef.current.rotation.y = THREE.MathUtils.lerp(rightRef.current.rotation.y, open ? 1.45 : 0, 0.07)
     }
   })
 
   return (
     <group>
-      <group ref={leftRef} position={[-1.25, 0, 0]}>
-        <mesh position={[0.62, 1.05, 0]}>
-          <boxGeometry args={[1.25, 2.1, 0.14]} />
-          <meshStandardMaterial color="#9a7f63" roughness={0.7} />
-        </mesh>
+      {/* left leaf hinged at the left post, spanning to the centre */}
+      <group ref={leftRef} position={[-2.6, 0, 0]}>
+        <GateLeaf dir={1} />
       </group>
-      <group ref={rightRef} position={[1.25, 0, 0]}>
-        <mesh position={[-0.62, 1.05, 0]}>
-          <boxGeometry args={[1.25, 2.1, 0.14]} />
-          <meshStandardMaterial color="#9a7f63" roughness={0.7} />
-        </mesh>
+      {/* right leaf hinged at the right post, spanning to the centre */}
+      <group ref={rightRef} position={[2.6, 0, 0]}>
+        <GateLeaf dir={-1} />
       </group>
     </group>
   )
@@ -4060,11 +4126,7 @@ function GardenGate({ open, highlighted }: { open: boolean; highlighted: boolean
           <meshStandardMaterial color="#ffe9ad" emissive="#ffe9ad" emissiveIntensity={0.9} />
         </mesh>
       ))}
-      <ModelBoundary fallback={<ProceduralGateDoors open={open} />}>
-        <Suspense fallback={<ProceduralGateDoors open={open} />}>
-          <GateModel open={open} />
-        </Suspense>
-      </ModelBoundary>
+      <ProceduralGateDoors open={open} />
       <RoseBush position={[-2.2, 0, 0.6]} scale={1} />
       <RoseBush position={[2.2, 0, 0.6]} scale={1} />
       <StationTitle position={[0, 5.2, 0]} title="Moon Gate" subtitle="The garden begins here" highlighted={highlighted} />
