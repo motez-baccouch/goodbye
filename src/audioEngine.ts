@@ -417,51 +417,79 @@ export function playMelody(): number {
   delay.connect(delayOut)
   delayOut.connect(context.destination)
 
+  // a fuller piano voice: fundamental + harmonics, bright attack, a lowpass that
+  // closes over time and a slight detune — far closer to a real struck string
   const piano = (frequency: number, at: number, duration: number, volume = 0.06) => {
-    const osc = context.createOscillator()
-    osc.type = 'triangle'
-    osc.frequency.setValueAtTime(frequency, at)
-    const overtone = context.createOscillator()
-    overtone.type = 'sine'
-    overtone.frequency.setValueAtTime(frequency * 2, at)
-    const overtoneGain = context.createGain()
-    overtoneGain.gain.setValueAtTime(0.28, at)
-
     const gain = context.createGain()
     gain.gain.setValueAtTime(0.0001, at)
-    gain.gain.exponentialRampToValueAtTime(volume, at + 0.012)
+    gain.gain.exponentialRampToValueAtTime(volume, at + 0.006)
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.4), at + 0.16)
     gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
 
-    osc.connect(gain)
-    overtone.connect(overtoneGain)
-    overtoneGain.connect(gain)
-    gain.connect(context.destination)
-    gain.connect(delay)
-    osc.start(at)
-    overtone.start(at)
-    osc.stop(at + duration + 0.05)
-    overtone.stop(at + duration + 0.05)
+    const filter = context.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(4600, at)
+    filter.frequency.exponentialRampToValueAtTime(850, at + duration)
+
+    gain.connect(filter)
+    filter.connect(context.destination)
+    filter.connect(delay)
+
+    const harmonics: Array<[number, number]> = [
+      [1, 1],
+      [2, 0.34],
+      [3, 0.15],
+      [4, 0.07],
+    ]
+    harmonics.forEach(([mult, amp], index) => {
+      const osc = context.createOscillator()
+      osc.type = index === 0 ? 'triangle' : 'sine'
+      osc.frequency.setValueAtTime(frequency * mult, at)
+      osc.detune.setValueAtTime((index - 1.5) * 1.5, at)
+      const partial = context.createGain()
+      partial.gain.setValueAtTime(amp, at)
+      osc.connect(partial)
+      partial.connect(gain)
+      osc.start(at)
+      osc.stop(at + duration + 0.1)
+    })
   }
 
-  const N = {
-    C3: 130.81, F3: 174.61, G3: 196, A3: 220,
+  const F = {
+    C2: 65.41, D2: 73.42, E2: 82.41, F2: 87.31, G2: 98, A2: 110,
+    C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196, A3: 220, B3: 246.94,
     C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88,
     C5: 523.25, D5: 587.33, E5: 659.25,
   }
 
+  // gentle I–V–vi–IV progression, arpeggiated in the left hand
+  const progression = [
+    { root: F.C3, third: F.E3, fifth: F.G3 },
+    { root: F.G2, third: F.B3, fifth: F.D3 },
+    { root: F.A2, third: F.C4, fifth: F.E3 },
+    { root: F.F2, third: F.A3, fifth: F.C4 },
+  ]
+  let bt = 0
+  for (let pass = 0; pass < 3; pass += 1) {
+    progression.forEach((chord) => {
+      const arp = [chord.root, chord.fifth, chord.root * 2, chord.third]
+      arp.forEach((freq, index) => piano(freq, start + (bt + index * 0.5) * beat, beat * 0.85, 0.024))
+      bt += 2
+    })
+  }
+  // resolve on a held C chord
+  ;[F.C3, F.G3, F.C4, F.E4].forEach((freq) => piano(freq, start + 24 * beat, beat * 6, 0.026))
+
+  // the singing right-hand melody
   const melody: Array<[number, number, number]> = [
-    [N.E4, 0, 1.5], [N.G4, 1.5, 0.5], [N.C5, 2, 2], [N.B4, 4, 1], [N.A4, 5, 1.5], [N.G4, 6.5, 0.5], [N.E4, 7, 2],
-    [N.D4, 9, 1], [N.F4, 10, 1], [N.A4, 11, 1], [N.G4, 12, 3],
-    [N.C5, 15, 1], [N.D5, 16, 1], [N.E5, 17, 3],
+    [F.E4, 0, 1], [F.G4, 1, 1], [F.C5, 2, 2], [F.B4, 4, 1], [F.A4, 5, 1], [F.G4, 6, 1.5], [F.E4, 7.5, 0.5],
+    [F.F4, 8, 1], [F.A4, 9, 1], [F.G4, 10, 2], [F.E4, 12, 1], [F.F4, 13, 1], [F.E4, 14, 1], [F.C4, 15, 1],
+    [F.E4, 16, 1], [F.G4, 17, 1], [F.C5, 18, 1], [F.D5, 19, 1], [F.E5, 20, 2], [F.C5, 22, 1], [F.G4, 23, 1],
+    [F.C5, 24, 5],
   ]
-  melody.forEach(([frequency, b, d]) => piano(frequency, start + b * beat, d * beat))
+  melody.forEach(([frequency, b, d]) => piano(frequency, start + b * beat, d * beat, 0.062))
 
-  const bass: Array<[number, number, number]> = [
-    [N.C3, 0, 3.5], [N.A3, 4, 3], [N.F3, 9, 3], [N.G3, 12, 3], [N.C3, 15, 5],
-  ]
-  bass.forEach(([frequency, b, d]) => piano(frequency, start + b * beat, d * beat, 0.03))
-
-  return 21 * beat * 1000
+  return 32 * beat * 1000
 }
 
 // A quick ascending sparkle used when the drive collects a star fragment.

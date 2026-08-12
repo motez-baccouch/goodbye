@@ -99,6 +99,20 @@ export function isMusicMuted() {
   return muted
 }
 
+// Duck the ambient music while the garden piano plays a piece, then restore it.
+// (called inside user taps / short timeouts; on iOS the element is already
+// unlocked from Start, so resume is allowed)
+export function setMusicDucked(ducked: boolean) {
+  if (ducked) {
+    gardenAudio?.pause()
+    finaleAudio?.pause()
+    generativeSetMuted(true)
+  } else if (!muted) {
+    currentAudio()?.play().catch(() => undefined)
+    generativeSetMuted(false)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Wind: soft filtered-noise gusts that swell and fade under the music
 // ---------------------------------------------------------------------------

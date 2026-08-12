@@ -624,6 +624,69 @@
     inset 0 0 0 1px rgba(255, 248, 231, 0.35);
 }
 
+/* aged parchment: warm mottled stains, soft vignette, deckled corners */
+.intro-letter-panel {
+  position: relative;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(120, 90, 50, 0.13), transparent 30%),
+    radial-gradient(circle at 82% 14%, rgba(120, 90, 50, 0.11), transparent 26%),
+    radial-gradient(circle at 68% 78%, rgba(95, 70, 38, 0.15), transparent 34%),
+    radial-gradient(circle at 26% 84%, rgba(120, 90, 50, 0.11), transparent 30%),
+    linear-gradient(160deg, #f4e8cf 0%, #ecdbbb 46%, #e3cfab 100%);
+  border: 1px solid rgba(150, 115, 70, 0.42);
+  border-radius: 0.5rem 1.4rem 0.6rem 1.2rem;
+  box-shadow:
+    inset 0 0 70px rgba(120, 90, 50, 0.24),
+    inset 0 0 0 1px rgba(255, 248, 231, 0.4),
+    0 22px 60px rgba(8, 8, 18, 0.5);
+  padding-top: 2.4rem;
+}
+
+.intro-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.intro-decor svg {
+  position: absolute;
+  filter: drop-shadow(0 4px 8px rgba(60, 45, 25, 0.28));
+}
+
+.intro-flower-tl {
+  top: 0.4rem;
+  left: 0.4rem;
+  width: 3.3rem;
+  transform: rotate(-12deg);
+}
+
+.intro-flower-br {
+  bottom: 5.4rem;
+  left: 0.7rem;
+  width: 2.7rem;
+  transform: rotate(16deg);
+}
+
+.intro-ink {
+  top: 0.2rem;
+  right: 0.6rem;
+  width: 2.5rem;
+}
+
+.intro-pen {
+  bottom: 5.2rem;
+  right: 0.5rem;
+  width: 7.5rem;
+}
+
+.intro-letter {
+  position: relative;
+  z-index: 1;
+}
+
 .intro-letter-panel h1,
 .memory-panel h1 {
   color: #3f2d1d;

@@ -3,7 +3,7 @@ import { Clone, Float, Line, RoundedBox, Sparkles, Stars, Text, useGLTF } from '
 import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { haptic, playFootstep, playMelody, playTone, unlockAudio } from './audioEngine'
-import { isMusicMuted, notifyFinale, setMusicMuted, startMusic } from './ambientMusic'
+import { isMusicMuted, notifyFinale, setMusicDucked, setMusicMuted, startMusic } from './ambientMusic'
 import { chapters, finalLetter } from './experienceData'
 import { SparkBurst, StationMiniGame } from './MiniGames'
 
@@ -600,7 +600,7 @@ function getNearbyInteractable(player: PlayerSample, gateOpen: boolean): Interac
     { id: 'reading', radius: 3.4 },
     { id: 'final', radius: 3.6 },
     { id: 'piano', radius: 3 },
-    { id: 'lighthouse', radius: 3.4 },
+    { id: 'lighthouse', radius: 4 },
   ]
 
   let nearest: Interactable | null = null
@@ -712,6 +712,49 @@ function FpsMeter() {
   }, [])
 
   return <div className="fps-meter">{fps} fps</div>
+}
+
+// Decorative flat-lay props (dip pen, ink pot, flowers) for the aged-parchment
+// intro letter — drawn as inline SVG so they stay crisp and self-contained.
+function IntroDecor() {
+  return (
+    <div className="intro-decor" aria-hidden="true">
+      <svg className="intro-flower intro-flower-tl" viewBox="0 0 64 64">
+        {[0, 72, 144, 216, 288].map((angle) => (
+          <ellipse key={angle} cx="32" cy="14" rx="8.5" ry="15" fill="#5a3ea6" transform={`rotate(${angle} 32 32)`} />
+        ))}
+        {[36, 108, 180, 252, 324].map((angle) => (
+          <ellipse key={angle} cx="32" cy="19" rx="6" ry="11" fill="#472c8c" transform={`rotate(${angle} 32 32)`} />
+        ))}
+        <circle cx="32" cy="32" r="6" fill="#efe6cf" />
+        <circle cx="32" cy="32" r="3" fill="#c9a94e" />
+      </svg>
+      <svg className="intro-flower intro-flower-br" viewBox="0 0 64 64">
+        {[20, 92, 164, 236, 308].map((angle) => (
+          <ellipse key={angle} cx="32" cy="15" rx="8" ry="14" fill="#5f43ad" transform={`rotate(${angle} 32 32)`} />
+        ))}
+        <circle cx="32" cy="32" r="5.5" fill="#efe6cf" />
+        <circle cx="32" cy="32" r="2.6" fill="#c9a94e" />
+      </svg>
+      <svg className="intro-ink" viewBox="0 0 60 100">
+        <ellipse cx="30" cy="93" rx="23" ry="5" fill="rgba(60,45,25,0.2)" />
+        <rect x="11" y="36" width="38" height="57" rx="8" fill="#182233" />
+        <rect x="11" y="36" width="15" height="57" rx="8" fill="#27334b" />
+        <rect x="18" y="20" width="24" height="18" rx="3" fill="#212b3d" />
+        <rect x="21" y="8" width="18" height="14" rx="4" fill="#2e3a52" />
+        <rect x="27" y="2" width="6" height="8" rx="2" fill="#3c4863" />
+      </svg>
+      <svg className="intro-pen" viewBox="0 0 170 54">
+        <g transform="rotate(-7 85 27)">
+          <rect x="50" y="21" width="112" height="10" rx="5" fill="#e4cd82" />
+          <rect x="50" y="21" width="112" height="4" rx="2" fill="#f4e2a4" />
+          <path d="M20 26 L50 16 L50 36 Z" fill="#9aa0ac" />
+          <path d="M8 26 L24 21 L24 31 Z" fill="#c8ccd4" />
+          <rect x="5" y="25" width="5" height="2" fill="#24304a" />
+        </g>
+      </svg>
+    </div>
+  )
 }
 
 function SceneCanvas() {
@@ -1373,8 +1416,12 @@ function SceneCanvas() {
       const duration = playMelody()
       haptic(12)
       setPianoPlaying(true)
+      setMusicDucked(true)
       setDetailMessage('A quiet melody drifts out across the moonlit garden.')
-      window.setTimeout(() => setPianoPlaying(false), duration || 9000)
+      window.setTimeout(() => {
+        setPianoPlaying(false)
+        setMusicDucked(false)
+      }, duration || 12000)
       return
     }
 
@@ -1704,6 +1751,8 @@ function SceneCanvas() {
                     where: finalUnlocked ? 'The very back · the last letter awaits' : 'The very back · opens once all is awake',
                     done: finalOpen,
                   },
+                  { name: 'The Piano', where: 'By the tea garden · sit and play a melody', done: false },
+                  { name: 'The Lighthouse', where: 'Far west corridor · climb it for the view', done: false },
                 ].map((place) => {
                   const isNext = place.name === guideTarget.label || `the ${place.name}` === guideTarget.label
                   return (
@@ -1777,33 +1826,28 @@ function SceneCanvas() {
           <div className={`overlay-panel garden-panel${overlayMode === 'intro' ? ' intro-letter-panel' : ''}`}>
             {overlayMode === 'intro' ? (
               <>
-                <div className="envelope-shell">
-                  <button type="button" className="envelope-card envelope-trigger" onClick={openIntroLetter}>
-                    <div className="envelope-flap" />
-                    <div className="wax-seal" />
-                  </button>
-                  <div className="intro-letter" onClick={openIntroLetter} role="button" tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        openIntroLetter()
-                      }
-                    }}
-                  >
-                    <p className="overlay-kicker">For Nour</p>
-                    <h1>The Light She Left Behind</h1>
-                    <p className="intro-script">
-                      Un jardin de souvenirs, de lettres anciennes, et d'un peu de lumiere.
-                    </p>
-                    <p>
-                      Collect every keepsake. The last letter will arrive from the sky.
-                    </p>
-                    <p className="intro-secret-hint">
-                      And little secrets glow all around the garden — find every one for a secret
-                      ending. Tap anything that shimmers. ✦
-                    </p>
-                    <p className="intro-sound-hint">Best with sound on.</p>
-                  </div>
+                <IntroDecor />
+                <div className="intro-letter" onClick={openIntroLetter} role="button" tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      openIntroLetter()
+                    }
+                  }}
+                >
+                  <p className="overlay-kicker">For Nour</p>
+                  <h1>The Light She Left Behind</h1>
+                  <p className="intro-script">
+                    Un jardin de souvenirs, de lettres anciennes, et d'un peu de lumiere.
+                  </p>
+                  <p>
+                    Collect every keepsake. The last letter will arrive from the sky.
+                  </p>
+                  <p className="intro-secret-hint">
+                    And little secrets glow all around the garden — find every one for a secret
+                    ending. Tap anything that shimmers. ✦
+                  </p>
+                  <p className="intro-sound-hint">Best with sound on.</p>
                 </div>
                 <div className="overlay-actions intro-actions">
                   <button
@@ -2230,7 +2274,7 @@ function FirstPersonRig({
       { x: 0, z: -2, radius: 1.2 },
       { x: 0, z: -46, radius: 1.35 },
       { x: -5, z: -0.5, radius: 1.1 },
-      { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 3 },
+      { x: LIGHTHOUSE_POS[0], z: LIGHTHOUSE_POS[2], radius: 2.6 },
     ]
 
     colliders.forEach((collider) => {
@@ -4307,21 +4351,35 @@ function TapRaycaster({
   return null
 }
 
-const perimeterHedges: Vec3[] = (() => {
-  const spots: Vec3[] = []
+// a tidy continuous hedge wall around the garden (far nicer than scattered spheres)
+const hedgeWallSegments: Array<{ pos: Vec3; size: [number, number, number] }> = [
+  { pos: [0, 0.9, 11], size: [43, 1.8, 1.4] },
+  { pos: [0, 0.9, -51], size: [43, 1.8, 1.4] },
+  { pos: [-21, 0.9, -20], size: [1.4, 1.8, 63] },
+  { pos: [21, 0.9, -20], size: [1.4, 1.8, 63] },
+]
 
-  for (let z = -50; z <= 10; z += 4) {
-    spots.push([-21, 0.55, z], [21, 0.55, z])
-  }
+function HedgeWalls() {
+  return (
+    <group>
+      {hedgeWallSegments.map((wall, index) => (
+        <group key={index}>
+          <mesh position={wall.pos} castShadow={false}>
+            <boxGeometry args={wall.size} />
+            <meshStandardMaterial color="#1f3a29" roughness={0.95} />
+          </mesh>
+          <mesh position={[wall.pos[0], 1.92, wall.pos[2]]}>
+            <boxGeometry args={[wall.size[0] + 0.16, 0.26, wall.size[2] + 0.16]} />
+            <meshStandardMaterial color="#2c523a" roughness={0.95} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
 
-  for (let x = -20; x <= 20; x += 4) {
-    spots.push([x, 0.55, 11], [x, 0.55, -51])
-  }
-
-  return spots
-})()
-
-function PerimeterHedges() {
+// instanced grass tufts scattered on the lawn for a lusher, less bare ground
+function GrassBlades({ count = 280 }: { count?: number }) {
   const meshRef = useRef<THREE.InstancedMesh>(null)
 
   useEffect(() => {
@@ -4332,25 +4390,25 @@ function PerimeterHedges() {
     }
 
     const dummy = new THREE.Object3D()
-    perimeterHedges.forEach((position, index) => {
-      dummy.position.set(position[0], position[1], position[2])
-      dummy.scale.setScalar(0.9 + pseudoRandom(index * 2 + 5) * 0.35)
-      dummy.rotation.y = pseudoRandom(index * 3 + 1) * Math.PI
+    for (let index = 0; index < count; index += 1) {
+      const seed = index * 4
+      const side = pseudoRandom(seed + 1) < 0.5 ? -1 : 1
+      const x = side * (3.5 + pseudoRandom(seed + 2) * 15.5)
+      const z = -50 + pseudoRandom(seed + 3) * 59
+      const scale = 0.7 + pseudoRandom(seed + 5) * 0.8
+      dummy.position.set(x, 0.24 * scale, z)
+      dummy.rotation.set((pseudoRandom(seed + 6) - 0.5) * 0.35, pseudoRandom(seed + 4) * Math.PI, (pseudoRandom(seed + 7) - 0.5) * 0.35)
+      dummy.scale.set(scale, scale, scale)
       dummy.updateMatrix()
       mesh.setMatrixAt(index, dummy.matrix)
-    })
+    }
     mesh.instanceMatrix.needsUpdate = true
-  }, [])
+  }, [count])
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[undefined, undefined, perimeterHedges.length]}
-      castShadow={false}
-      frustumCulled={false}
-    >
-      <sphereGeometry args={[1.6, 12, 12]} />
-      <meshStandardMaterial color="#1f3427" roughness={0.95} />
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false} castShadow={false}>
+      <coneGeometry args={[0.055, 0.52, 4]} />
+      <meshStandardMaterial color="#43704b" roughness={0.9} flatShading />
     </instancedMesh>
   )
 }
@@ -4397,7 +4455,8 @@ function ScatterPebbles({ count = 40 }: { count?: number }) {
 function GardenHedges() {
   return (
     <group>
-      <PerimeterHedges />
+      <HedgeWalls />
+      <GrassBlades />
       <ScatterPebbles />
       {/* the front hedge wall either side of the moon gate */}
       {gateHedgeWalls.map((wall, index) => (
